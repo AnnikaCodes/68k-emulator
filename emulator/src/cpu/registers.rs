@@ -36,6 +36,7 @@ pub enum AddressRegister {
     A7,
 }
 
+#[derive(Default)]
 pub struct Registers {
     // Data registers
     d0: RegisterValue,
@@ -64,31 +65,6 @@ pub struct Registers {
     status: u16,
 }
 
-impl Default for Registers {
-    fn default() -> Registers {
-        Registers {
-            d0: 0,
-            d1: 0,
-            d2: 0,
-            d3: 0,
-            d4: 0,
-            d5: 0,
-            d6: 0,
-            d7: 0,
-            a0: 0,
-            a1: 0,
-            a2: 0,
-            a3: 0,
-            a4: 0,
-            a5: 0,
-            a6: 0,
-            a7: 0,
-            pc: 0,
-            status: 0,
-        }
-    }
-}
-
 impl Registers {
     pub fn new() -> Self {
         Self::default()
@@ -102,7 +78,7 @@ impl Registers {
         }
     }
 
-    pub fn get_data_register<'a>(&self, register: &'a DataRegister) -> RegisterValue {
+    pub fn get_data_register(&self, register: &DataRegister) -> RegisterValue {
         match register {
             DataRegister::D0 => self.d0,
             DataRegister::D1 => self.d1,
@@ -115,7 +91,7 @@ impl Registers {
         }
     }
 
-    pub fn get_address_register<'a>(&self, register: &'a AddressRegister) -> RegisterValue {
+    pub fn get_address_register(&self, register: &AddressRegister) -> RegisterValue {
         match register {
             AddressRegister::A0 => self.a0,
             AddressRegister::A1 => self.a1,

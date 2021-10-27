@@ -53,6 +53,6 @@ where
     }
 
     pub fn get_address_value(&self, addr: AddressMode) -> u32 {
-        addr.get_value(&self)
+        addr.get_value(self)
     }
 }
