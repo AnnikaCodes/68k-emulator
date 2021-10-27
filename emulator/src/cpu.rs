@@ -1,8 +1,12 @@
-/// CPU emulation
+// CPU emulation
+use crate::ram::{Memory, VecBackedMemory};
 
 type RegisterValue = u32;
 
-pub enum CPUError {}
+#[derive(Debug)]
+pub enum CPUError {
+    MemoryOutOfBoundsAccess(u32),
+}
 
 #[derive(Debug)] // remove if perf issue
 pub enum OperandSize {
@@ -23,7 +27,7 @@ impl SizedValue for u32 {}
 
 pub trait Addressable<T: SizedValue> {
     /// Returns the value of the address.
-    fn get_value(&self, cpu: &mut CPU) -> T;
+    fn get_value(&self, cpu: &mut CPU<impl Memory>) -> T;
 }
 
 #[derive(Debug)] // remove if perf issue
@@ -117,16 +121,22 @@ pub enum AddressMode {
     },
 
     // Absolute addressing
-    AbsoluteShort { address: u16 },
-    AbsoluteLong { address: u32 },
+    AbsoluteShort {
+        address: u16,
+    },
+    AbsoluteLong {
+        address: u32,
+    },
 
     // Immediate addressing
-    Immediate { value: u32 },
+    Immediate {
+        value: u32,
+    },
 }
 
 /// A CPU instruction
 pub trait Instruction {
-    fn execute(&self, cpu: &mut CPU) -> Result<(), CPUError>;
+    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError>;
 }
 
 pub struct Registers {
@@ -230,14 +240,19 @@ impl Registers {
     }
 }
 
-pub struct CPU {
+pub struct CPU<M: Memory> {
     pub registers: Registers,
+    pub memory: M,
 }
 
-impl CPU {
-    pub fn new() -> Self {
+impl<RAM> CPU<RAM>
+where
+RAM: Memory,
+{
+    pub fn new(ram_size_in_bytes: usize) -> Self {
         Self {
             registers: Registers::new(),
+            memory: RAM::new(ram_size_in_bytes),
         }
     }
 
@@ -265,7 +280,7 @@ mod tests {
 
     #[test]
     fn set_pc() {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::<VecBackedMemory>::new(1024);
 
         assert_eq!(cpu.registers.pc, 0x0);
         cpu.set_pc(0xDEADBEEF);
@@ -279,16 +294,19 @@ mod address_modes {
 
     #[test]
     fn register_direct() {
-        let mut cpu = CPU::new();
-        let mode = AddressMode::RegisterDirect { register: Register::Data(DataRegister::D0) };
-        cpu.registers.set(Register::Data(DataRegister::D0), 0xDEADBEEF);
+        let mut cpu = CPU::<VecBackedMemory>::new(1024);
+        let mode = AddressMode::RegisterDirect {
+            register: Register::Data(DataRegister::D0),
+        };
+        cpu.registers
+            .set(Register::Data(DataRegister::D0), 0xDEADBEEF);
 
         assert_eq!(cpu.get_address_value(mode), 0xDEADBEEF);
     }
 
     #[test]
     fn immediate() {
-        let mut cpu = CPU::new();
+        let cpu = CPU::<VecBackedMemory>::new(1024);
         let mode = AddressMode::Immediate { value: 0xDEADBEEF };
 
         assert_eq!(cpu.get_address_value(mode), 0xDEADBEEF);
