@@ -5,15 +5,15 @@ use crate::cpu::CPUError;
 pub trait Memory {
     fn new(size_in_bytes: usize) -> Self;
 
-    fn read_byte(&self, addr: u32) -> Result<u8, CPUError>;
-    fn read_word(&self, addr: u32) -> Result<u16, CPUError>;
-    fn read_long(&self, addr: u32) -> Result<u32, CPUError>;
-    fn read_bytes(&self, addr: u32, len: u32) -> Result<Vec<u8>, CPUError>;
+    fn read_byte(&self, address: u32) -> Result<u8, CPUError>;
+    fn read_word(&self, address: u32) -> Result<u16, CPUError>;
+    fn read_long(&self, address: u32) -> Result<u32, CPUError>;
+    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError>;
 
-    fn write_byte(&mut self, addr: u32, byte: u8) -> Result<(), CPUError>;
-    fn write_word(&mut self, addr: u32, word: u16) -> Result<(), CPUError>;
-    fn write_long(&mut self, addr: u32, long: u32) -> Result<(), CPUError>;
-    fn write_bytes(&mut self, addr: u32, bytes: Vec<u8>) -> Result<(), CPUError>;
+    fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError>;
+    fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError>;
+    fn write_long(&mut self, address: u32, value: u32) -> Result<(), CPUError>;
+    fn write_bytes(&mut self, address: u32, bytes: Vec<u8>) -> Result<(), CPUError>;
 }
 
 /// Naive Vec<u8> implementation of RAM
@@ -29,58 +29,58 @@ impl Memory for VecBackedMemory {
         }
     }
 
-    fn read_byte(&self, addr: u32) -> Result<u8, CPUError> {
-        match self.random_access_buf.get(addr as usize) {
+    fn read_byte(&self, address: u32) -> Result<u8, CPUError> {
+        match self.random_access_buf.get(address as usize) {
             Some(byte) => Ok(*byte),
-            None => Err(CPUError::MemoryOutOfBoundsAccess(addr)),
+            None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
         }
     }
-    fn read_bytes(&self, addr: u32, len: u32) -> Result<Vec<u8>, CPUError> {
+    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError> {
         let mut bytes = Vec::with_capacity(len as usize);
         for i in 0..len {
-            bytes.push(self.read_byte(addr + i)?);
+            bytes.push(self.read_byte(address + i)?);
         }
         Ok(bytes)
     }
-    fn read_word(&self, addr: u32) -> Result<u16, CPUError> {
-        let high_byte = self.read_byte(addr)?;
-        let low_byte = self.read_byte(addr + 1)?;
+    fn read_word(&self, address: u32) -> Result<u16, CPUError> {
+        let high_byte = self.read_byte(address)?;
+        let low_byte = self.read_byte(address + 1)?;
         Ok(((high_byte as u16) << 8) + low_byte as u16)
     }
 
-    fn read_long(&self, addr: u32) -> Result<u32, CPUError> {
-        let high_word = self.read_word(addr)?;
-        let low_word = self.read_word(addr + 2)?;
+    fn read_long(&self, address: u32) -> Result<u32, CPUError> {
+        let high_word = self.read_word(address)?;
+        let low_word = self.read_word(address + 2)?;
         Ok(((high_word as u32) << 16) + low_word as u32)
     }
 
-    fn write_byte(&mut self, addr: u32, byte: u8) -> Result<(), CPUError> {
-        if addr as usize > self.random_access_buf.len() {
-            Err(CPUError::MemoryOutOfBoundsAccess(addr))
+    fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError> {
+        if address as usize > self.random_access_buf.len() {
+            Err(CPUError::MemoryOutOfBoundsAccess(address))
         } else {
-            self.random_access_buf.insert(addr as usize, byte);
+            self.random_access_buf.insert(address as usize, value);
             Ok(())
         }
     }
-    fn write_bytes(&mut self, addr: u32, bytes: Vec<u8>) -> Result<(), CPUError> {
-        for (i, byte) in bytes.iter().enumerate() {
-            self.write_byte(addr + i as u32, *byte)?;
+    fn write_bytes(&mut self, address: u32, value: Vec<u8>) -> Result<(), CPUError> {
+        for (i, byte) in value.iter().enumerate() {
+            self.write_byte(address + i as u32, *byte)?;
         }
         Ok(())
     }
-    fn write_word(&mut self, addr: u32, word: u16) -> Result<(), CPUError> {
-        let low_byte = (word & 0x00FF) as u8;
-        let high_byte = (word >> 8) as u8;
+    fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError> {
+        let low_byte = (value & 0x00FF) as u8;
+        let high_byte = (value >> 8) as u8;
 
-        self.write_byte(addr, high_byte)?;
-        self.write_byte(addr + 1, low_byte)
+        self.write_byte(address, high_byte)?;
+        self.write_byte(address + 1, low_byte)
     }
-    fn write_long(&mut self, addr: u32, long: u32) -> Result<(), CPUError> {
+    fn write_long(&mut self, address: u32, long: u32) -> Result<(), CPUError> {
         let low_word = (long & 0x0000FFFF) as u16;
         let high_word = (long >> 16) as u16;
 
-        self.write_word(addr, high_word)?;
-        self.write_word(addr + 2, low_word)
+        self.write_word(address, high_word)?;
+        self.write_word(address + 2, low_word)
     }
 }
 
