@@ -422,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "not yet implemented"]
     fn program_counter_indirect_with_displacement() {
         let mut cpu = CPU::<VecBackedMemory>::new(8192);
         let mode = AddressMode::ProgramCounterIndirectWithDisplacement {
@@ -436,6 +437,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "not yet implemented"]
     fn program_counter_indirect_indexed() {
         let mut cpu = CPU::<VecBackedMemory>::new(8192);
         let mode = AddressMode::ProgramCounterIndirectWithIndex {
@@ -453,6 +455,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "not yet implemented"]
     fn program_counter_memory_post_indexed() {
         let initial_address = 0xAA;
         for size in [OperandSize::Byte, OperandSize::Word, OperandSize::Long] {
@@ -481,6 +484,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "not yet implemented"]
     fn program_counter_memory_pre_indexed() {
         let initial_address = 0xAA;
         for size in [OperandSize::Byte, OperandSize::Word, OperandSize::Long] {
