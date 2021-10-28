@@ -1,15 +1,17 @@
-use crate::cpu::CPUError;
+use crate::{cpu::CPUError, M68kInteger, OperandSize};
 
 // Emulation of Random-Access Memory (RAM)
 
 pub trait Memory {
     fn new(size_in_bytes: usize) -> Self;
 
+    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError>;
     fn read_byte(&self, address: u32) -> Result<u8, CPUError>;
     fn read_word(&self, address: u32) -> Result<u16, CPUError>;
     fn read_long(&self, address: u32) -> Result<u32, CPUError>;
     fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError>;
 
+    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), CPUError>;
     fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError>;
     fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError>;
     fn write_long(&mut self, address: u32, value: u32) -> Result<(), CPUError>;
@@ -29,6 +31,13 @@ impl Memory for VecBackedMemory {
         }
     }
 
+    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError> {
+        match size {
+            OperandSize::Byte => Ok(M68kInteger::Byte(self.read_byte(address)?)),
+            OperandSize::Word => Ok(M68kInteger::Word(self.read_word(address)?)),
+            OperandSize::Long => Ok(M68kInteger::Long(self.read_long(address)?)),
+        }
+    }
     fn read_byte(&self, address: u32) -> Result<u8, CPUError> {
         match self.random_access_buf.get(address as usize) {
             Some(byte) => Ok(*byte),
@@ -54,12 +63,19 @@ impl Memory for VecBackedMemory {
         Ok(((high_word as u32) << 16) + low_word as u32)
     }
 
+    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), CPUError> {
+        match value {
+            M68kInteger::Byte(value) => self.write_byte(address, value),
+            M68kInteger::Word(value) => self.write_word(address, value),
+            M68kInteger::Long(value) => self.write_long(address, value),
+        }
+    }
     fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError> {
         match self.random_access_buf.get_mut(address as usize) {
             Some(byte) => {
                 *byte = value;
                 Ok(())
-            },
+            }
             None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
         }
     }

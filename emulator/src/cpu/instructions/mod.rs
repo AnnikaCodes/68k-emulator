@@ -10,11 +10,10 @@
 
 use crate::ram::Memory;
 
-use super::{CPU, CPUError};
+use super::{CPUError, CPU};
 pub mod isa_68000;
 
 /// A CPU instruction
 pub trait Instruction {
     fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError>;
 }
-

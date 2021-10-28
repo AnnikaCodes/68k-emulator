@@ -105,7 +105,8 @@ impl Registers {
         }
     }
 
-    pub fn set(&mut self, register: Register, new_value: RegisterValue) {
+    pub fn set(&mut self, register: Register, new_value: impl Into<RegisterValue> + Copy) {
+        let new_value = new_value.into();
         match register {
             Register::Data(reg) => self.set_data_register(reg, new_value),
             Register::Address(reg) => self.set_address_register(reg, new_value),
@@ -113,7 +114,12 @@ impl Registers {
         }
     }
 
-    pub fn set_address_register(&mut self, register: AddressRegister, new_value: RegisterValue) {
+    pub fn set_address_register(
+        &mut self,
+        register: AddressRegister,
+        new_value: impl Into<RegisterValue> + Copy,
+    ) {
+        let new_value = new_value.into();
         match register {
             AddressRegister::A0 => self.a0 = new_value,
             AddressRegister::A1 => self.a1 = new_value,
@@ -126,7 +132,12 @@ impl Registers {
         }
     }
 
-    pub fn set_data_register(&mut self, register: DataRegister, new_value: RegisterValue) {
+    pub fn set_data_register(
+        &mut self,
+        register: DataRegister,
+        new_value: impl Into<RegisterValue> + Copy,
+    ) {
+        let new_value = new_value.into();
         match register {
             DataRegister::D0 => self.d0 = new_value,
             DataRegister::D1 => self.d1 = new_value,
