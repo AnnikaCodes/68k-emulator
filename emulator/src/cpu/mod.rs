@@ -2,9 +2,10 @@
 use crate::ram::Memory;
 pub mod addressing;
 pub mod registers;
+pub mod instructions;
 use registers::*;
 
-use self::addressing::AddressMode;
+use self::{addressing::AddressMode, instructions::Instruction};
 
 #[derive(Debug)]
 pub enum CPUError {
@@ -24,11 +25,6 @@ impl SizedValue for u32 {}
 pub trait Addressable<T: SizedValue> {
     /// Returns the value of the address.
     fn get_value(&self, cpu: &mut CPU<impl Memory>) -> T;
-}
-
-/// A CPU instruction
-pub trait Instruction {
-    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError>;
 }
 
 pub struct CPU<M: Memory> {
