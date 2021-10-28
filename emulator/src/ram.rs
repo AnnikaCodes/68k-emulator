@@ -55,11 +55,9 @@ impl Memory for VecBackedMemory {
     }
 
     fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError> {
-        if address as usize > self.random_access_buf.len() {
-            Err(CPUError::MemoryOutOfBoundsAccess(address))
-        } else {
-            self.random_access_buf.insert(address as usize, value);
-            Ok(())
+        match self.random_access_buf.get_mut(address as usize) {
+            Some(byte) => Ok(*byte = value)
+            None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
         }
     }
     fn write_bytes(&mut self, address: u32, value: Vec<u8>) -> Result<(), CPUError> {
