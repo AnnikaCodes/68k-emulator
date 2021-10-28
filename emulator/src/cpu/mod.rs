@@ -52,7 +52,7 @@ where
         instruction.execute(self)
     }
 
-    pub fn get_address_value(&self, addr: AddressMode) -> Result<u32, CPUError> {
+    pub fn get_address_value(&mut self, addr: AddressMode) -> Result<u32, CPUError> {
         addr.get_value(self)
     }
 }

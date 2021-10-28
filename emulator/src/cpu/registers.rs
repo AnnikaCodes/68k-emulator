@@ -33,9 +33,8 @@ pub enum AddressRegister {
     A4,
     A5,
     A6,
+    /// Is the stack pointer
     A7,
-    /// Special case for the stack pointer - alias to A7
-    SP,
 }
 
 #[derive(Default)]
@@ -102,7 +101,7 @@ impl Registers {
             AddressRegister::A4 => self.a4,
             AddressRegister::A5 => self.a5,
             AddressRegister::A6 => self.a6,
-            AddressRegister::A7 | AddressRegister::SP => self.a7,
+            AddressRegister::A7 => self.a7,
         }
     }
 
@@ -123,7 +122,7 @@ impl Registers {
             AddressRegister::A4 => self.a4 = new_value,
             AddressRegister::A5 => self.a5 = new_value,
             AddressRegister::A6 => self.a6 = new_value,
-            AddressRegister::A7 | AddressRegister::SP => self.a7 = new_value,
+            AddressRegister::A7 => self.a7 = new_value,
         }
     }
 
