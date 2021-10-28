@@ -83,21 +83,18 @@ pub enum AddressMode {
         displacement: u16,
         index_register: Register,
         index_scale: IndexScale,
-        size: OperandSize,
     },
     ProgramCounterMemoryIndirectPreIndexed {
         base_displacement: u16,
         outer_displacement: u16,
         index_register: Register,
         index_scale: IndexScale,
-        size: OperandSize,
     },
     ProgramCounterMemoryIndirectPostIndexed {
         base_displacement: u16,
         outer_displacement: u16,
         index_register: Register,
         index_scale: IndexScale,
-        size: OperandSize,
     },
 
     // Absolute addressing
@@ -126,9 +123,67 @@ fn get_increment(register: &AddressRegister, size: &OperandSize) -> u32 {
     }
 }
 
+/// Addresses a value at the RAM address in a register with displacement
+fn address_register_indirect_with_displacement(
+    cpu: &mut CPU<impl crate::ram::Memory>,
+    register: Register,
+    displacement: u32,
+) -> Result<u32, CPUError> {
+    cpu.memory
+        .read_long(cpu.registers.get(register) + displacement)
+}
+
+/// Addresses a value at the RAM address in a register with indexing
+fn address_register_indirect_indexed(
+    cpu: &mut CPU<impl crate::ram::Memory>,
+    address_register: Register,
+    index_register: Register,
+    index_scale: u32,
+    displacement: u32,
+) -> Result<u32, CPUError> {
+    let base_address = cpu.registers.get(address_register);
+    let index_value = cpu.registers.get(index_register) * index_scale;
+    let operand_address = base_address + displacement + index_value;
+    cpu.memory.read_long(operand_address)
+}
+
+/// Addresses a value at a given address with a postindex register
+fn address_ram_post_indexed(
+    cpu: &mut CPU<impl crate::ram::Memory>,
+    base_address: u32,
+    index_register: Register,
+    index_scale: u32,
+    base_displacement: u32,
+    outer_displacement: u32,
+) -> Result<u32, CPUError> {
+    let index_value = cpu.registers.get(index_register) * index_scale;
+    let intermediate_address = base_address + base_displacement;
+    let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
+
+    cpu.memory
+        .read_long(intermediate_address_value + index_value + outer_displacement)
+}
+
+/// Addresses a value at a given address with a preindex register
+fn address_ram_pre_indexed(
+    cpu: &mut CPU<impl crate::ram::Memory>,
+    base_address: u32,
+    index_register: Register,
+    index_scale: u32,
+    base_displacement: u32,
+    outer_displacement: u32,
+) -> Result<u32, CPUError> {
+    let index_value = cpu.registers.get(index_register) * index_scale;
+    let intermediate_address = base_address + base_displacement + index_value;
+    let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
+
+    cpu.memory
+        .read_long(intermediate_address_value + outer_displacement)
+}
+
 impl AddressMode {
-    // TODO: does this need to return more than a u32?
-    // Should it support getting bytes/words?
+    // TODO: does this need to return more than a u32? Should it support getting bytes/words?
+    // (probably, but I'd like to see a basic long-only implementation first, to keep myself motivated)
     pub fn get_value(&self, cpu: &mut CPU<impl crate::ram::Memory>) -> Result<u32, CPUError> {
         match self {
             // Absolute
@@ -148,38 +203,80 @@ impl AddressMode {
                 index_register,
                 index_scale,
                 ..
-            } => {
-                let base_address = cpu.registers.get_address_register(*address_register);
-                let index_value = cpu.registers.get(*index_register) * (*index_scale as u32);
-                let operand_address = base_address + *displacement as u32 + index_value;
-                cpu.memory.read_long(operand_address)
-            },
-            AddressMode::RegisterIndirectPostIncrement {
-                register,
-                size,
-            } => {
+            } => address_register_indirect_indexed(
+                cpu,
+                Register::Address(*address_register),
+                *index_register,
+                *index_scale as u32,
+                *displacement as u32,
+            ),
+            AddressMode::RegisterIndirectPostIncrement { register, size } => {
                 let address = cpu.registers.get_address_register(*register);
                 let value = cpu.memory.read_long(address)?;
-                cpu.registers.set_address_register(*register, address + get_increment(register, size));
+                cpu.registers
+                    .set_address_register(*register, address + get_increment(register, size));
                 Ok(value)
-            },
-            AddressMode::RegisterIndirectPreDecrement {
-                register,
-                size,
-            } => {
-                let address = cpu.registers.get_address_register(*register) - get_increment(register, size);
+            }
+            AddressMode::RegisterIndirectPreDecrement { register, size } => {
+                let address =
+                    cpu.registers.get_address_register(*register) - get_increment(register, size);
                 cpu.registers.set_address_register(*register, address);
                 cpu.memory.read_long(address)
-            },
+            }
             AddressMode::RegisterIndirectWithDisplacement {
                 register,
                 displacement,
-            } => {
-                let address = cpu.registers.get_address_register(*register) + *displacement as u32;
-                cpu.memory.read_long(address)
-            },
+            } => address_register_indirect_with_displacement(
+                cpu,
+                Register::Address(*register),
+                *displacement as u32,
+            ),
 
             // Program Counter
+            AddressMode::ProgramCounterIndirectWithDisplacement { displacement } => {
+                address_register_indirect_with_displacement(
+                    cpu,
+                    Register::ProgramCounter,
+                    *displacement as u32,
+                )
+            }
+            AddressMode::ProgramCounterIndirectWithIndex {
+                displacement,
+                index_register,
+                index_scale,
+            } => address_register_indirect_indexed(
+                cpu,
+                Register::ProgramCounter,
+                *index_register,
+                *index_scale as u32,
+                *displacement as u32,
+            ),
+            AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+                base_displacement,
+                outer_displacement,
+                index_register,
+                index_scale,
+            } => address_ram_post_indexed(
+                cpu,
+                cpu.registers.get(Register::ProgramCounter),
+                *index_register,
+                *index_scale as u32,
+                *base_displacement as u32,
+                *outer_displacement as u32,
+            ),
+            AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+                base_displacement,
+                outer_displacement,
+                index_register,
+                index_scale,
+            } => address_ram_pre_indexed(
+                cpu,
+                cpu.registers.get(Register::ProgramCounter),
+                *index_register,
+                *index_scale as u32,
+                *base_displacement as u32,
+                *outer_displacement as u32,
+            ),
 
             // Memory
             AddressMode::MemoryPostIndexed {
@@ -188,29 +285,28 @@ impl AddressMode {
                 address_register,
                 index_register,
                 index_scale,
-            } => {
-                let base_address = cpu.registers.get_address_register(*address_register);
-                let index_value = cpu.registers.get(*index_register) * (*index_scale as u32);
-                let intermediate_address = base_address + *base_displacement as u32;
-                let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
-
-                cpu.memory.read_long(intermediate_address_value + index_value + *outer_displacement as u32)
-            },
+            } => address_ram_post_indexed(
+                cpu,
+                cpu.registers.get_address_register(*address_register),
+                *index_register,
+                *index_scale as u32,
+                *base_displacement as u32,
+                *outer_displacement as u32,
+            ),
             AddressMode::MemoryPreIndexed {
                 base_displacement,
                 outer_displacement,
                 address_register,
                 index_register,
                 index_scale,
-            } => {
-                let base_address = cpu.registers.get_address_register(*address_register);
-                let index_value = cpu.registers.get(*index_register) * (*index_scale as u32);
-                let intermediate_address = base_address + *base_displacement as u32 + index_value;
-                let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
-
-                cpu.memory.read_long(intermediate_address_value + *outer_displacement as u32)
-            },
-            _ => unimplemented!("Addressing mode {:?}", self),
+            } => address_ram_pre_indexed(
+                cpu,
+                cpu.registers.get_address_register(*address_register),
+                *index_register,
+                *index_scale as u32,
+                *base_displacement as u32,
+                *outer_displacement as u32,
+            ),
         }
     }
 }
@@ -338,11 +434,10 @@ mod tests {
             register: ADDRESS_REGISTER,
         };
 
-        cpu.registers.set_address_register(ADDRESS_REGISTER, ADDRESS);
+        cpu.registers
+            .set_address_register(ADDRESS_REGISTER, ADDRESS);
         let addr = ADDRESS + DISPLACEMENT as u32;
-        cpu.memory
-            .write_long(addr, VALUE)
-            .unwrap();
+        cpu.memory.write_long(addr, VALUE).unwrap();
         assert_eq!(mode.get_value(&mut cpu).unwrap(), VALUE);
     }
 
@@ -388,9 +483,7 @@ mod tests {
         cpu.memory
             .write_long(intermediate_address, ADDRESS)
             .unwrap();
-        cpu.memory
-            .write_long(operand_address, VALUE)
-            .unwrap();
+        cpu.memory.write_long(operand_address, VALUE).unwrap();
         assert_eq!(mode.get_value(&mut cpu).unwrap(), VALUE);
     }
 
@@ -422,14 +515,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn program_counter_indirect_with_displacement() {
         let mut cpu = CPU::<VecBackedMemory>::new(8192);
         let mode = AddressMode::ProgramCounterIndirectWithDisplacement {
             displacement: DISPLACEMENT,
         };
 
-        cpu.registers.set(Register::ProgramCounter, VALUE);
+        cpu.registers.set(Register::ProgramCounter, ADDRESS);
         cpu.memory
             .write_long(ADDRESS + DISPLACEMENT as u32, VALUE)
             .unwrap();
@@ -437,17 +529,17 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn program_counter_indirect_indexed() {
         let mut cpu = CPU::<VecBackedMemory>::new(8192);
         let mode = AddressMode::ProgramCounterIndirectWithIndex {
             displacement: DISPLACEMENT,
             index_register: Register::Data(DATA_REGISTER),
             index_scale: IndexScale::Two,
-            size: OperandSize::Word,
         };
 
-        cpu.registers.set(Register::ProgramCounter, VALUE);
+        cpu.registers.set(Register::ProgramCounter, ADDRESS);
+        cpu.registers.set_data_register(DATA_REGISTER, INDEX);
+
         cpu.memory
             .write_long(ADDRESS + DISPLACEMENT as u32 + (INDEX * 2), VALUE)
             .unwrap();
@@ -455,61 +547,53 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn program_counter_memory_post_indexed() {
         let initial_address = 0xAA;
-        for size in [OperandSize::Byte, OperandSize::Word, OperandSize::Long] {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
-            let mode = AddressMode::ProgramCounterMemoryIndirectPostIndexed {
-                size,
-                base_displacement: DISPLACEMENT,
-                outer_displacement: OUTER_DISPLACEMENT,
-                index_register: Register::Data(DATA_REGISTER),
-                index_scale: IndexScale::Four,
-            };
+        let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        let mode = AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+            base_displacement: DISPLACEMENT,
+            outer_displacement: OUTER_DISPLACEMENT,
+            index_register: Register::Data(DATA_REGISTER),
+            index_scale: IndexScale::Four,
+        };
 
-            cpu.registers.set(Register::ProgramCounter, initial_address);
-            cpu.registers.set_data_register(DATA_REGISTER, INDEX);
+        cpu.registers.set(Register::ProgramCounter, initial_address);
+        cpu.registers.set_data_register(DATA_REGISTER, INDEX);
 
-            let intermediate_address = initial_address + DISPLACEMENT as u32;
-            cpu.memory
-                .write_long(intermediate_address, ADDRESS)
-                .unwrap();
-            cpu.memory
-                .write_long(ADDRESS + (INDEX * 4) + OUTER_DISPLACEMENT as u32, VALUE)
-                .unwrap();
+        let intermediate_address = initial_address + DISPLACEMENT as u32;
+        cpu.memory
+            .write_long(intermediate_address, ADDRESS)
+            .unwrap();
+        cpu.memory
+            .write_long(ADDRESS + (INDEX * 4) + OUTER_DISPLACEMENT as u32, VALUE)
+            .unwrap();
 
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), VALUE);
-        }
+        assert_eq!(mode.get_value(&mut cpu).unwrap(), VALUE);
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn program_counter_memory_pre_indexed() {
         let initial_address = 0xAA;
-        for size in [OperandSize::Byte, OperandSize::Word, OperandSize::Long] {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
-            let mode = AddressMode::ProgramCounterMemoryIndirectPreIndexed {
-                size,
-                base_displacement: DISPLACEMENT,
-                outer_displacement: OUTER_DISPLACEMENT,
-                index_register: Register::Data(DATA_REGISTER),
-                index_scale: IndexScale::Four,
-            };
+        let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        let mode = AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+            base_displacement: DISPLACEMENT,
+            outer_displacement: OUTER_DISPLACEMENT,
+            index_register: Register::Data(DATA_REGISTER),
+            index_scale: IndexScale::Four,
+        };
 
-            cpu.registers.set(Register::ProgramCounter, initial_address);
-            cpu.registers.set_data_register(DATA_REGISTER, INDEX);
+        cpu.registers.set(Register::ProgramCounter, initial_address);
+        cpu.registers.set_data_register(DATA_REGISTER, INDEX);
 
-            let intermediate_address = initial_address + DISPLACEMENT as u32 + (INDEX * 4);
-            cpu.memory
-                .write_long(intermediate_address, ADDRESS)
-                .unwrap();
-            cpu.memory
-                .write_long(ADDRESS + OUTER_DISPLACEMENT as u32, VALUE)
-                .unwrap();
+        let intermediate_address = initial_address + DISPLACEMENT as u32 + (INDEX * 4);
+        cpu.memory
+            .write_long(intermediate_address, ADDRESS)
+            .unwrap();
+        cpu.memory
+            .write_long(ADDRESS + OUTER_DISPLACEMENT as u32, VALUE)
+            .unwrap();
 
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), VALUE);
-        }
+        assert_eq!(mode.get_value(&mut cpu).unwrap(), VALUE);
     }
 
     #[test]
