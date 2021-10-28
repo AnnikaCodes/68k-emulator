@@ -5,14 +5,14 @@
 pub type RegisterValue = u32;
 
 /// The status register is smaller and has its own methods
-#[derive(Debug)] // remove if perf issue
+#[derive(Debug, Clone, Copy)] // remove if perf issue
 pub enum Register {
     Data(DataRegister),
     Address(AddressRegister),
     ProgramCounter,
 }
 
-#[derive(Debug)] // remove if perf issue
+#[derive(Debug, Clone, Copy)] // remove if perf issue
 pub enum DataRegister {
     D0,
     D1,
@@ -24,7 +24,7 @@ pub enum DataRegister {
     D7,
 }
 
-#[derive(Debug)] // remove if perf issue
+#[derive(Debug, Clone, Copy)] // remove if perf issue
 pub enum AddressRegister {
     A0,
     A1,
@@ -34,6 +34,8 @@ pub enum AddressRegister {
     A5,
     A6,
     A7,
+    /// Special case for the stack pointer - alias to A7
+    SP,
 }
 
 #[derive(Default)]
@@ -70,15 +72,15 @@ impl Registers {
         Self::default()
     }
 
-    pub fn get<'a>(&self, register: impl Into<&'a Register>) -> RegisterValue {
+    pub fn get(&self, register: impl Into<Register>) -> RegisterValue {
         match register.into() {
-            Register::Data(ref reg) => self.get_data_register(reg),
-            Register::Address(ref reg) => self.get_address_register(reg),
+            Register::Data(reg) => self.get_data_register(reg),
+            Register::Address(reg) => self.get_address_register(reg),
             Register::ProgramCounter => self.pc,
         }
     }
 
-    pub fn get_data_register(&self, register: &DataRegister) -> RegisterValue {
+    pub fn get_data_register(&self, register: DataRegister) -> RegisterValue {
         match register {
             DataRegister::D0 => self.d0,
             DataRegister::D1 => self.d1,
@@ -91,7 +93,7 @@ impl Registers {
         }
     }
 
-    pub fn get_address_register(&self, register: &AddressRegister) -> RegisterValue {
+    pub fn get_address_register(&self, register: AddressRegister) -> RegisterValue {
         match register {
             AddressRegister::A0 => self.a0,
             AddressRegister::A1 => self.a1,
@@ -100,7 +102,7 @@ impl Registers {
             AddressRegister::A4 => self.a4,
             AddressRegister::A5 => self.a5,
             AddressRegister::A6 => self.a6,
-            AddressRegister::A7 => self.a7,
+            AddressRegister::A7 | AddressRegister::SP => self.a7,
         }
     }
 
@@ -121,7 +123,7 @@ impl Registers {
             AddressRegister::A4 => self.a4 = new_value,
             AddressRegister::A5 => self.a5 = new_value,
             AddressRegister::A6 => self.a6 = new_value,
-            AddressRegister::A7 => self.a7 = new_value,
+            AddressRegister::A7 | AddressRegister::SP => self.a7 = new_value,
         }
     }
 
