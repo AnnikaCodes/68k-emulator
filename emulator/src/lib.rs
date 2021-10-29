@@ -4,6 +4,7 @@ use std::ops::{Add, Sub};
 
 use cpu::CPUError;
 pub mod cpu;
+pub mod parsers;
 pub mod ram;
 
 /// The 68000 handles three sizes of data:

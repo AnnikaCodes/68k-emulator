@@ -94,8 +94,28 @@ use crate::{
 
 use super::Instruction;
 
+
+// I don't like this, but it's better than a giant method with lots of enum matching...
+// ...I think?
+//
+// If perf is bad we can just do a big enum.
+pub enum InstructionFor68000 {
+    Add(Add),
+    Move(Move),
+    Subtract(Subtract),
+}
+impl Instruction for InstructionFor68000 {
+    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
+        match self {
+            InstructionFor68000::Add(i) => i.execute(cpu),
+            InstructionFor68000::Move(i) => i.execute(cpu),
+            InstructionFor68000::Subtract(i) => i.execute(cpu),
+        }
+    }
+}
+
 // Can switch to an enum if perf is an issue
-struct Move {
+pub struct Move {
     source: AddressMode,
     destination: AddressMode,
 }
@@ -107,7 +127,7 @@ impl Instruction for Move {
     }
 }
 
-struct Add {
+pub struct Add {
     source: AddressMode,
     destination: AddressMode,
 }
@@ -119,7 +139,7 @@ impl Instruction for Add {
     }
 }
 
-struct Subtract {
+pub struct Subtract {
     source: AddressMode,
     destination: AddressMode,
 }
