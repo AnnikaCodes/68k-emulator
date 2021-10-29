@@ -87,7 +87,10 @@
 //! TST (Test Operand),
 //! UNLK (Unlink)
 
-use crate::{cpu::{CPU, CPUError, addressing::AddressMode}, ram::Memory};
+use crate::{
+    cpu::{addressing::AddressMode, CPUError, CPU},
+    ram::Memory,
+};
 
 use super::Instruction;
 
@@ -106,17 +109,31 @@ impl Instruction for Move {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{OperandSize, cpu::{CPU, addressing::AddressMode}, ram::VecBackedMemory};
+    use crate::{
+        cpu::{addressing::AddressMode, CPU},
+        ram::VecBackedMemory,
+        OperandSize,
+    };
 
     static ADDRESS: u32 = 0x40;
     static VALUE: u32 = 0xDEADBEEF;
 
     #[test]
+    #[ignore = "unimplemented"]
     fn move_instruction() {
         let mut cpu = CPU::<VecBackedMemory>::new(1024);
-        let destination = AddressMode::Absolute { address: ADDRESS, size: OperandSize::Long };
-        let source = AddressMode::Immediate { value: VALUE, size: OperandSize::Long };
-        let instruction = Move { source, destination };
+        let destination = AddressMode::Absolute {
+            address: ADDRESS,
+            size: OperandSize::Long,
+        };
+        let source = AddressMode::Immediate {
+            value: VALUE,
+            size: OperandSize::Long,
+        };
+        let instruction = Move {
+            source,
+            destination,
+        };
 
         instruction.execute(&mut cpu).unwrap();
         assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);

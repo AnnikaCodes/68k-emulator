@@ -2,7 +2,7 @@
 //!
 //!  Each CPU has its own file, so you can do things like
 //! ```
-//! use emulator::cpu::instructions::isa_68000;
+//! use emulator::cpu::isa_68000;
 //! ```
 //! to only use the 68000 instructions.
 //!
@@ -15,7 +15,6 @@ pub mod registers;
 use registers::*;
 
 use self::addressing::AddressMode;
-
 
 /// A CPU instruction
 pub trait Instruction {
