@@ -16,8 +16,8 @@ use registers::*;
 
 use self::addressing::AddressMode;
 
-/// A CPU instruction
-pub trait Instruction {
+/// Trait for all ISA enums to implement
+pub trait InstructionSet {
     fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError>;
 }
 
@@ -45,7 +45,7 @@ where
     }
 
     /// Syntactic sugar
-    pub fn run_instruction(&mut self, instruction: impl Instruction) -> Result<(), CPUError> {
+    pub fn run_instruction(&mut self, instruction: impl InstructionSet) -> Result<(), CPUError> {
         instruction.execute(self)
     }
 

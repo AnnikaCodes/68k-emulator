@@ -203,7 +203,7 @@ impl AssemblyInterpreter {
 }
 
 impl Interpreter<String> for AssemblyInterpreter {
-    fn parse_instruction(&mut self, source: String) -> Result<InstructionFor68000, ParseError> {
+    fn parse_instruction(&mut self, source: String) -> Result<ISA68000, ParseError> {
         let lowercase_source = source.to_lowercase();
         let (instruction_token, rest) = match lowercase_source.trim().split_once(' ') {
             Some(s) => s,
@@ -216,10 +216,10 @@ impl Interpreter<String> for AssemblyInterpreter {
             "move" => {
                 let (source_addr, destination_addr) =
                     AssemblyInterpreter::parse_source_dest(rest, source)?;
-                Ok(InstructionFor68000::Move(Move {
-                    source: source_addr,
-                    destination: destination_addr,
-                }))
+                Ok(ISA68000::Move {
+                    src: source_addr,
+                    dest: destination_addr,
+                })
             }
             _ => Err(ParseError::UnknownInstruction(
                 instruction_token.to_string(),
@@ -246,30 +246,30 @@ mod tests {
         for (raw, parsed) in [
             (
                 "MOVE a0, a1",
-                InstructionFor68000::Move(Move {
-                    source: AddressMode::RegisterDirect {
+                ISA68000::Move {
+                    src: AddressMode::RegisterDirect {
                         register: Address(AddressRegister::A0),
                         size: Long,
                     },
-                    destination: AddressMode::RegisterDirect {
+                    dest: AddressMode::RegisterDirect {
                         register: Address(AddressRegister::A1),
                         size: Long,
                     },
-                }),
+                },
             ),
             (
                 "MOVE (12, a5), d3",
-                InstructionFor68000::Move(Move {
-                    source: AddressMode::RegisterIndirectWithDisplacement {
+                ISA68000::Move {
+                    src: AddressMode::RegisterIndirectWithDisplacement {
                         register: AddressRegister::A5,
                         displacement: 12,
                         size: Long,
                     },
-                    destination: AddressMode::RegisterDirect {
+                    dest: AddressMode::RegisterDirect {
                         register: Data(DataRegister::D3),
                         size: Long,
                     },
-                }),
+                },
             ),
         ] {
             let mut interpreter = AssemblyInterpreter::new();

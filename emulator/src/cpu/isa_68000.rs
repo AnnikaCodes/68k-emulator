@@ -92,65 +92,31 @@ use crate::{
     ram::Memory,
 };
 
-use super::Instruction;
+use super::InstructionSet;
 
-// I don't like this, but it's better than a giant method with lots of enum matching...
-// ...I think?
-//
-// If perf is bad we can just do a big enum.
 #[derive(Debug, PartialEq)]
-pub enum InstructionFor68000 {
-    Add(Add),
-    Move(Move),
-    Subtract(Subtract),
+pub enum ISA68000 {
+    Add { src: AddressMode, dest: AddressMode },
+    Subtract { src: AddressMode, dest: AddressMode },
+    Move { src: AddressMode, dest: AddressMode },
 }
-impl Instruction for InstructionFor68000 {
+
+impl InstructionSet for ISA68000 {
     fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
         match self {
-            InstructionFor68000::Add(i) => i.execute(cpu),
-            InstructionFor68000::Move(i) => i.execute(cpu),
-            InstructionFor68000::Subtract(i) => i.execute(cpu),
+            ISA68000::Add { src, dest } => {
+                let val = src.get_value(cpu)? + dest.get_value(cpu)?;
+                dest.set_value(cpu, val)
+            }
+            ISA68000::Subtract { src, dest } => {
+                let val = src.get_value(cpu)? - dest.get_value(cpu)?;
+                dest.set_value(cpu, val)
+            }
+            ISA68000::Move { src, dest } => {
+                let val = src.get_value(cpu)?;
+                dest.set_value(cpu, val)
+            }
         }
-    }
-}
-
-// Can switch to an enum if perf is an issue
-#[derive(Debug, PartialEq)]
-pub struct Move {
-    pub source: AddressMode,
-    pub destination: AddressMode,
-}
-
-impl Instruction for Move {
-    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
-        let val = self.source.get_value(cpu)?;
-        self.destination.set_value(cpu, val)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Add {
-    source: AddressMode,
-    destination: AddressMode,
-}
-
-impl Instruction for Add {
-    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
-        let val = self.source.get_value(cpu)? + self.destination.get_value(cpu)?;
-        self.destination.set_value(cpu, val)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Subtract {
-    source: AddressMode,
-    destination: AddressMode,
-}
-
-impl Instruction for Subtract {
-    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
-        let val = self.source.get_value(cpu)? - self.destination.get_value(cpu)?;
-        self.destination.set_value(cpu, val)
     }
 }
 
@@ -169,18 +135,15 @@ mod test {
     #[test]
     fn move_instruction() {
         let mut cpu = CPU::<VecBackedMemory>::new(1024);
-        let destination = AddressMode::Absolute {
+        let dest = AddressMode::Absolute {
             address: ADDRESS,
             size: OperandSize::Long,
         };
-        let source = AddressMode::Immediate {
+        let src = AddressMode::Immediate {
             value: VALUE,
             size: OperandSize::Long,
         };
-        let instruction = Move {
-            source,
-            destination,
-        };
+        let instruction = ISA68000::Move { src, dest };
 
         instruction.execute(&mut cpu).unwrap();
         assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);
@@ -191,26 +154,23 @@ mod test {
         for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xFFFFFFFF, 1, 0x00000000u32)] {
             let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
-            let source = AddressMode::Immediate {
+            let src = AddressMode::Immediate {
                 value: a,
                 size: OperandSize::Long,
             };
-            let destination = AddressMode::Absolute {
+            let dest = AddressMode::Absolute {
                 address: ADDRESS,
                 size: OperandSize::Long,
             };
-            destination.set_value(cpu, M68kInteger::Long(b)).unwrap();
+            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
 
-            let instruction = Add {
-                source,
-                destination: destination.clone(),
+            let instruction = ISA68000::Add {
+                src,
+                dest: dest.clone(),
             };
 
             instruction.execute(cpu).unwrap();
-            assert_eq!(
-                destination.get_value(cpu).unwrap(),
-                M68kInteger::Long(result)
-            );
+            assert_eq!(dest.get_value(cpu).unwrap(), M68kInteger::Long(result));
         }
     }
 
@@ -220,26 +180,23 @@ mod test {
         for (a, b, result) in [(1, 2, 0xFFFFFFFF), (0, 0, 0), (20, 10, 10)] {
             let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
-            let source = AddressMode::Immediate {
+            let src = AddressMode::Immediate {
                 value: a,
                 size: OperandSize::Long,
             };
-            let destination = AddressMode::Absolute {
+            let dest = AddressMode::Absolute {
                 address: ADDRESS,
                 size: OperandSize::Long,
             };
-            destination.set_value(cpu, M68kInteger::Long(b)).unwrap();
+            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
 
-            let instruction = Subtract {
-                source,
-                destination: destination.clone(),
+            let instruction = ISA68000::Subtract {
+                src,
+                dest: dest.clone(),
             };
 
             instruction.execute(cpu).unwrap();
-            assert_eq!(
-                destination.get_value(cpu).unwrap(),
-                M68kInteger::Long(result)
-            );
+            assert_eq!(dest.get_value(cpu).unwrap(), M68kInteger::Long(result));
         }
     }
 }

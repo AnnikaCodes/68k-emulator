@@ -5,7 +5,7 @@
 
 use std::num::{ParseIntError, TryFromIntError};
 
-use crate::cpu::isa_68000::InstructionFor68000;
+use crate::cpu::isa_68000::ISA68000;
 pub mod assembly;
 
 #[derive(Debug)]
@@ -35,12 +35,12 @@ pub enum ParseError {
 
 /// A parser
 pub trait Parser<T> {
-    fn parse(&mut self, source: T) -> Result<Vec<InstructionFor68000>, ParseError>;
+    fn parse(&mut self, source: T) -> Result<Vec<ISA68000>, ParseError>;
 }
 
 /// An incremental parser, suitable for a REPL
 pub trait Interpreter<T> {
-    fn parse_instruction(&mut self, source: T) -> Result<InstructionFor68000, ParseError>;
+    fn parse_instruction(&mut self, source: T) -> Result<ISA68000, ParseError>;
 }
 
 impl<T, P> Parser<Vec<T>> for P
@@ -48,7 +48,7 @@ where
     P: Interpreter<T>,
     T: Sized,
 {
-    fn parse(&mut self, source: Vec<T>) -> Result<Vec<InstructionFor68000>, ParseError> {
+    fn parse(&mut self, source: Vec<T>) -> Result<Vec<ISA68000>, ParseError> {
         let mut instructions = Vec::new();
         for item in source {
             instructions.push(self.parse_instruction(item)?);
