@@ -1,14 +1,12 @@
 //! Parses assembly code
 
 use super::{Interpreter, ParseError};
-use crate::OperandSize;
-use crate::{
-    cpu::{
-        addressing::AddressMode,
-        isa_68000::*,
-        registers::{AddressRegister, DataRegister, Register},
-    },
+use crate::cpu::{
+    addressing::AddressMode,
+    isa_68000::*,
+    registers::{AddressRegister, DataRegister, Register},
 };
+use crate::OperandSize;
 
 pub struct AssemblyInterpreter {}
 
@@ -34,6 +32,89 @@ impl AssemblyInterpreter {
                 value: Self::parse_to_number(&op_string[1..])?,
                 size: OperandSize::Long,
             }),
+            // Indirect Stuff
+            Some('(' | '-') => {
+                if !op_string.ends_with(')') && !op_string.ends_with('+') {
+                    return Err(ParseError::UnknownOperandFormat {
+                        operand: op_string.to_string(),
+                        instruction: instruction.clone(),
+                    });
+                }
+                let op_string = op_string.replace(|c| c == '(' || c == ')', "");
+                let parts = op_string.split(',').collect::<Vec<&str>>();
+                match parts.len() {
+                    // Register Indirect potentially with postincr/predecr
+                    1 => {
+                        let mut register = parts[0];
+                        let mut is_postincr = false;
+                        let mut is_predecr = false;
+
+                        if register.starts_with('-') {
+                            register = &register[1..];
+                            is_predecr = true;
+                        }
+                        if register.ends_with('+') {
+                            register = &register[..register.len() - 1];
+                            is_postincr = true;
+                        }
+
+                        let (register, size) = match Self::parse_to_register(register)? {
+                            Register::Address(reg) => (reg, OperandSize::Long),
+                            _ => {
+                                return Err(ParseError::InvalidOperand {
+                                    operand: op_string.to_string(),
+                                    instruction: instruction.clone(),
+                                })
+                            }
+                        };
+
+                        if is_postincr && is_predecr {
+                            Err(ParseError::UnknownOperandFormat {
+                                operand: op_string.to_string(),
+                                instruction: instruction.clone(),
+                            })
+                        } else if is_postincr {
+                            Ok(AddressMode::RegisterIndirectPostIncrement { register, size })
+                        } else if is_predecr {
+                            Ok(AddressMode::RegisterIndirectPreDecrement { register, size })
+                        } else {
+                            Ok(AddressMode::RegisterIndirect { register, size })
+                        }
+                    }
+                    // Displacement
+                    2 => {
+                        let (displacement, register) = (parts[0].trim(), parts[1].trim());
+                        let displacement = match Self::parse_to_number(displacement)?.try_into() {
+                            Ok(d) => d,
+                            Err(error) => return Err(ParseError::NumberTooLarge(error)),
+                        };
+
+                        match Self::parse_to_register(register)? {
+                            Register::Address(reg) => {
+                                Ok(AddressMode::RegisterIndirectWithDisplacement {
+                                    displacement,
+                                    register: reg,
+                                    size: OperandSize::Long,
+                                })
+                            }
+                            Register::ProgramCounter => {
+                                Ok(AddressMode::ProgramCounterIndirectWithDisplacement {
+                                    displacement,
+                                    size: OperandSize::Long,
+                                })
+                            }
+                            _ => Err(ParseError::InvalidOperand {
+                                operand: op_string.to_string(),
+                                instruction: instruction.clone(),
+                            }),
+                        }
+                    }
+                    _ => Err(ParseError::UnknownOperandFormat {
+                        operand: op_string.to_string(),
+                        instruction: instruction.clone(),
+                    }),
+                }
+            }
             _ => Err(ParseError::UnknownOperandFormat {
                 operand: op_string.to_string(),
                 instruction: instruction.clone(),
@@ -80,6 +161,8 @@ impl AssemblyInterpreter {
             "a6" => Ok(Register::Address(AddressRegister::A6)),
             "a7" | "sp" => Ok(Register::Address(AddressRegister::A7)),
 
+            "pc" => Ok(Register::ProgramCounter),
+
             _ => Err(ParseError::UnknownRegister(register.to_string())),
         }
     }
@@ -103,8 +186,11 @@ impl AssemblyInterpreter {
                 // they are part of the assembly representation of certain addressing modes.
                 ',' if paren_level == 0 => {
                     let (source_asm, dest_asm) = op_string.split_at(idx);
-                    let source = Self::parse_to_operand(source_asm, &instruction)?;
-                    let destination = Self::parse_to_operand(dest_asm, &instruction)?;
+                    let source = Self::parse_to_operand(source_asm.trim(), &instruction)?;
+                    let destination = Self::parse_to_operand(
+                        dest_asm.trim_start_matches(|c| c == ' ' || c == ','),
+                        &instruction,
+                    )?;
                     return Ok((source, destination));
                 }
                 _ => {}
@@ -155,21 +241,36 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_move() {
-        for (raw, parsed) in [(
-            "MOVE a0, a1",
-            InstructionFor68000::Move(Move {
-                source: AddressMode::RegisterDirect {
-                    register: Address(AddressRegister::A0),
-                    size: Byte,
-                },
-                destination: AddressMode::RegisterDirect {
-                    register: Address(AddressRegister::A1),
-                    size: Byte,
-                },
-            }),
-        )] {
+        for (raw, parsed) in [
+            (
+                "MOVE a0, a1",
+                InstructionFor68000::Move(Move {
+                    source: AddressMode::RegisterDirect {
+                        register: Address(AddressRegister::A0),
+                        size: Long,
+                    },
+                    destination: AddressMode::RegisterDirect {
+                        register: Address(AddressRegister::A1),
+                        size: Long,
+                    },
+                }),
+            ),
+            (
+                "MOVE (12, a5), d3",
+                InstructionFor68000::Move(Move {
+                    source: AddressMode::RegisterIndirectWithDisplacement {
+                        register: AddressRegister::A5,
+                        displacement: 12,
+                        size: Long,
+                    },
+                    destination: AddressMode::RegisterDirect {
+                        register: Data(DataRegister::D3),
+                        size: Long,
+                    },
+                }),
+            ),
+        ] {
             let mut interpreter = AssemblyInterpreter::new();
             assert_eq!(
                 interpreter.parse_instruction(raw.to_string()).unwrap(),
@@ -197,10 +298,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_register_indirect() {
         for (operand, register) in [
-            ("(a3)", AddressRegister::A6),
+            ("(a3)", AddressRegister::A3),
             ("(a7)", AddressRegister::A7),
             ("(sp)", AddressRegister::A7),
         ] {
@@ -215,10 +315,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_register_indirect_postincrement() {
         for (operand, register) in [
-            ("(a1)+", AddressRegister::A6),
+            ("(a1)+", AddressRegister::A1),
             ("(a7)+", AddressRegister::A7),
             ("(sp)+", AddressRegister::A7),
         ] {
@@ -233,10 +332,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_register_indirect_predecrement() {
         for (operand, register) in [
-            ("-(a1)", AddressRegister::A6),
+            ("-(a5)", AddressRegister::A5),
             ("-(a7)", AddressRegister::A7),
             ("-(sp)", AddressRegister::A7),
         ] {
@@ -251,10 +349,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_register_indirect_displacement() {
         for (operand, displacement, register) in [
-            ("(1, a1)", 1, AddressRegister::A6),
+            ("(1, a3)", 1, AddressRegister::A3),
             ("(8, a7)", 8, AddressRegister::A7),
             ("(952, sp)", 952, AddressRegister::A7),
         ] {
@@ -320,7 +417,7 @@ mod tests {
             size,
         ) in [
             (
-                "([1,a1] d3.b, 2)", // TODO: does this need + signs
+                "([1,a1], d3.b, 2)", // TODO: does this need + signs
                 1,
                 2,
                 AddressRegister::A1,
@@ -328,7 +425,7 @@ mod tests {
                 Byte,
             ),
             (
-                "([8,a7] a4.w, 952)",
+                "([8,a7], a4.w, 952)",
                 8,
                 952,
                 AddressRegister::A7,
@@ -336,7 +433,7 @@ mod tests {
                 Word,
             ),
             (
-                "([952,sp] d5.l, 1)",
+                "([952,sp], d5.l, 1)",
                 952,
                 1,
                 AddressRegister::A7,
@@ -404,6 +501,20 @@ mod tests {
                     outer_displacement,
                     size,
                 }
+            );
+        }
+    }
+
+    #[test]
+    fn parse_to_operand_pc_indirect_with_displacement() {
+        for (operand, displacement, size) in [
+            ("(1, pc)", 1, Long),
+            ("(8, pc)", 8, Long),
+            ("(952, pc)", 952, Long),
+        ] {
+            assert_eq!(
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
+                AddressMode::ProgramCounterIndirectWithDisplacement { displacement, size }
             );
         }
     }
