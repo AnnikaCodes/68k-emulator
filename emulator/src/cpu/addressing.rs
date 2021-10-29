@@ -121,8 +121,8 @@ fn get_increment(register: AddressRegister, size: OperandSize) -> u32 {
     }
 }
 
-/// Addresses a value at the RAM address in a register with displacement
-fn address_register_indirect_with_displacement(
+/// Gets a value at the RAM address in a register with displacement
+fn get_address_register_indirect_with_displacement(
     cpu: &mut CPU<impl crate::ram::Memory>,
     register: Register,
     displacement: u32,
@@ -132,8 +132,18 @@ fn address_register_indirect_with_displacement(
         .read(cpu.registers.get(register) + displacement, size)
 }
 
-/// Addresses a value at the RAM address in a register with indexing
-fn address_register_indirect_indexed(
+/// Sets a value at the RAM address in a register with displacement
+fn set_address_register_indirect_with_displacement(
+    cpu: &mut CPU<impl crate::ram::Memory>,
+    register: Register,
+    displacement: u32,
+    value: M68kInteger,
+) -> Result<(), CPUError> {
+    cpu.memory.write(cpu.registers.get(register) + displacement, value)
+}
+
+/// Gets a value at the RAM address in a register with indexing
+fn get_address_register_indirect_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     address_register: Register,
     index_register: Register,
@@ -145,11 +155,23 @@ fn address_register_indirect_indexed(
     let index_value = cpu.registers.get(index_register) * index_scale;
     let operand_address = base_address + displacement + index_value;
 
-    match size {
-        OperandSize::Byte => Ok(M68kInteger::Byte(cpu.memory.read_byte(operand_address)?)),
-        OperandSize::Word => Ok(M68kInteger::Word(cpu.memory.read_word(operand_address)?)),
-        OperandSize::Long => Ok(M68kInteger::Long(cpu.memory.read_long(operand_address)?)),
-    }
+    cpu.memory.read(operand_address, size)
+}
+
+/// Sets a value at the RAM address in a register with indexing
+fn set_address_register_indirect_indexed(
+    cpu: &mut CPU<impl crate::ram::Memory>,
+    address_register: Register,
+    index_register: Register,
+    index_scale: u32,
+    displacement: u32,
+    value: M68kInteger,
+) -> Result<(), CPUError> {
+    let base_address = cpu.registers.get(address_register);
+    let index_value = cpu.registers.get(index_register) * index_scale;
+    let operand_address = base_address + displacement + index_value;
+
+    cpu.memory.write(operand_address, value)
 }
 
 /// Addresses a value at a given address with a postindex register
@@ -191,6 +213,10 @@ fn address_ram_pre_indexed(
 }
 
 impl AddressMode {
+
+    /// Gets the value referenced by this address
+    ///
+    /// Should return the same size `M68kInteger` as the `OperandSize` given in the enum
     pub fn get_value(
         &self,
         cpu: &mut CPU<impl crate::ram::Memory>,
@@ -221,7 +247,7 @@ impl AddressMode {
                 index_register,
                 index_scale,
                 size,
-            } => address_register_indirect_indexed(
+            } => get_address_register_indirect_indexed(
                 cpu,
                 Register::Address(address_register),
                 index_register,
@@ -230,10 +256,8 @@ impl AddressMode {
                 size,
             ),
             AddressMode::RegisterIndirectPostIncrement { register, size } => {
-                dbg!(size);
                 let address = cpu.registers.get_address_register(register);
                 let value = cpu.memory.read(address, size)?;
-                dbg!(size);
                 cpu.registers
                     .set_address_register(register, address + get_increment(register, size));
                 Ok(value)
@@ -248,7 +272,7 @@ impl AddressMode {
                 register,
                 displacement,
                 size,
-            } => address_register_indirect_with_displacement(
+            } => get_address_register_indirect_with_displacement(
                 cpu,
                 Register::Address(register),
                 displacement as u32,
@@ -257,7 +281,7 @@ impl AddressMode {
 
             // Program Counter
             AddressMode::ProgramCounterIndirectWithDisplacement { displacement, size } => {
-                address_register_indirect_with_displacement(
+                get_address_register_indirect_with_displacement(
                     cpu,
                     Register::ProgramCounter,
                     displacement as u32,
@@ -269,7 +293,7 @@ impl AddressMode {
                 index_register,
                 index_scale,
                 size,
-            } => address_register_indirect_indexed(
+            } => get_address_register_indirect_indexed(
                 cpu,
                 Register::ProgramCounter,
                 index_register,
@@ -344,9 +368,175 @@ impl AddressMode {
         }
     }
 
+    /// Sets the RAM or register referenced by this address to the given value
+    ///
+    /// Currently, this also checks that the provided `new_value` is the same size as the `OperandSize` given in the enum;
+    /// if this presents a performance issue, we can remove it or make it configurable.
+    ///
+    /// Also, it currently leads to quite a bit of code repetition; in the future, I might refactor this
+    /// to only write the size-checking line once, probably by peeking into the enum
+    /// or specifying the OperandSize without wrapping it in an enum.
     pub fn set_value(&self, cpu: &mut CPU<impl Memory>, new_value: M68kInteger) -> Result<(), CPUError> {
         match *self {
+            // Absolute
+            AddressMode::Absolute { address, size } => {
+                new_value.check_size(size)?;
+                cpu.memory.write(address, new_value)
+            },
+
+            // Immediate
             AddressMode::Immediate { .. } => Err(CPUError::WriteToReadOnly(format!("can't write to constant value"))),
+
+            // Register
+            AddressMode::RegisterDirect { register, size } => {
+                new_value.check_size(size)?;
+                let new_value: u32 = new_value.into();
+                cpu.registers.set(register, new_value);
+                Ok(())
+            },
+
+            AddressMode::RegisterIndirect { register, size } => {
+                new_value.check_size(size)?;
+                cpu
+                    .memory
+                    .write(cpu.registers.get_address_register(register), new_value)
+            },
+            AddressMode::RegisterIndirectIndexed {
+                displacement,
+                address_register,
+                index_register,
+                index_scale,
+                size,
+            } => {
+                new_value.check_size(size)?;
+                set_address_register_indirect_indexed(
+                    cpu,
+                    Register::Address(address_register),
+                    index_register,
+                    index_scale as u32,
+                    displacement as u32,
+                    new_value,
+                )
+            }
+            AddressMode::RegisterIndirectPostIncrement { register, size } => {
+                new_value.check_size(size)?;
+
+                let address = cpu.registers.get_address_register(register);
+                cpu.memory.write(address, new_value)?;
+                cpu.registers
+                    .set_address_register(register, address + get_increment(register, size));
+                Ok(())
+            }
+            AddressMode::RegisterIndirectPreDecrement { register, size } => {
+                new_value.check_size(size)?;
+
+                // could optimize this by having an increment/decrement register method
+                let address =
+                    cpu.registers.get_address_register(register) - get_increment(register, size);
+                cpu.registers.set_address_register(register, address);
+                cpu.memory.write(address, new_value)
+            }
+            AddressMode::RegisterIndirectWithDisplacement {
+                register,
+                displacement,
+                size,
+            } => {
+                new_value.check_size(size)?;
+                set_address_register_indirect_with_displacement(
+                    cpu,
+                    Register::Address(register),
+                    displacement as u32,
+                    new_value,
+                )
+            }
+
+            // // Program Counter
+            // AddressMode::ProgramCounterIndirectWithDisplacement { displacement, size } => {
+            //     get_address_register_indirect_with_displacement(
+            //         cpu,
+            //         Register::ProgramCounter,
+            //         displacement as u32,
+            //         size,
+            //     )
+            // }
+            // AddressMode::ProgramCounterIndirectWithIndex {
+            //     displacement,
+            //     index_register,
+            //     index_scale,
+            //     size,
+            // } => address_register_indirect_indexed(
+            //     cpu,
+            //     Register::ProgramCounter,
+            //     index_register,
+            //     index_scale as u32,
+            //     displacement as u32,
+            //     size,
+            // ),
+            // AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+            //     base_displacement,
+            //     outer_displacement,
+            //     index_register,
+            //     index_scale,
+            //     size,
+            // } => address_ram_post_indexed(
+            //     cpu,
+            //     cpu.registers.get(Register::ProgramCounter),
+            //     index_register,
+            //     index_scale as u32,
+            //     base_displacement as u32,
+            //     outer_displacement as u32,
+            //     size,
+            // ),
+            // AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+            //     base_displacement,
+            //     outer_displacement,
+            //     index_register,
+            //     index_scale,
+            //     size,
+            // } => address_ram_pre_indexed(
+            //     cpu,
+            //     cpu.registers.get(Register::ProgramCounter),
+            //     index_register,
+            //     index_scale as u32,
+            //     base_displacement as u32,
+            //     outer_displacement as u32,
+            //     size,
+            // ),
+
+            // // Memory
+            // AddressMode::MemoryPostIndexed {
+            //     base_displacement,
+            //     outer_displacement,
+            //     address_register,
+            //     index_register,
+            //     index_scale,
+            //     size,
+            // } => address_ram_post_indexed(
+            //     cpu,
+            //     cpu.registers.get_address_register(address_register),
+            //     index_register,
+            //     index_scale as u32,
+            //     base_displacement as u32,
+            //     outer_displacement as u32,
+            //     size,
+            // ),
+            // AddressMode::MemoryPreIndexed {
+            //     base_displacement,
+            //     outer_displacement,
+            //     address_register,
+            //     index_register,
+            //     index_scale,
+            //     size,
+            // } => address_ram_pre_indexed(
+            //     cpu,
+            //     cpu.registers.get_address_register(address_register),
+            //     index_register,
+            //     index_scale as u32,
+            //     base_displacement as u32,
+            //     outer_displacement as u32,
+            //     size,
+            // ),
+
             _ => unimplemented!("Setting value at addressing mode {:?}", self),
         }
     }
@@ -466,7 +656,7 @@ mod tests {
 
             // set
             mode.set_value(&mut cpu, set_value)?;
-            assert_eq!(cpu.memory.read(ADDRESS - byte_offset, size)?, set_value);
+            assert_eq!(cpu.memory.read(ADDRESS - (byte_offset * 2), size)?, set_value);
             assert_eq!(
                 cpu.registers.get_address_register(ADDRESS_REGISTER),
                 ADDRESS - (byte_offset * 2)
@@ -516,7 +706,7 @@ mod tests {
         ); // not -1
 
         // set
-        post_incr.set_value(&mut cpu, M68kInteger::Byte(1)).unwrap();
+        pre_decr.set_value(&mut cpu, M68kInteger::Byte(1)).unwrap();
         assert_eq!(
             cpu.registers.get_address_register(AddressRegister::A7),
             ADDRESS - 4

@@ -1,4 +1,6 @@
 //! Motorola 68k CPU emulation library.
+
+use cpu::CPUError;
 pub mod cpu;
 pub mod ram;
 
@@ -22,7 +24,7 @@ pub mod ram;
 /// ```
 ///
 /// `M68kInteger` is a wrapper enum which represents a byte, word, or long (internally as a Rust u8, u16, or u32).
-#[derive(Debug, Copy, Clone)] // remove if perf issue
+#[derive(Debug, Copy, Clone, PartialEq, Eq)] // remove if perf issue
 pub enum OperandSize {
     Byte,
     Word,
@@ -52,6 +54,24 @@ impl From<M68kInteger> for u32 {
             M68kInteger::Byte(b) => b as u32,
             M68kInteger::Word(w) => w as u32,
             M68kInteger::Long(l) => l,
+        }
+    }
+}
+
+impl M68kInteger {
+    pub fn is_size(&self, size: OperandSize) -> bool {
+        match self {
+            M68kInteger::Byte(_) => size == OperandSize::Byte,
+            M68kInteger::Word(_) => size == OperandSize::Word,
+            M68kInteger::Long(_) => size == OperandSize::Long,
+        }
+    }
+
+    pub fn check_size(&self, size: OperandSize) -> Result<(), CPUError> {
+        if !self.is_size(size) {
+            Err(CPUError::WrongSizeInteger(*self))
+        } else {
+            Ok(())
         }
     }
 }

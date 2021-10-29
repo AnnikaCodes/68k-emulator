@@ -26,6 +26,7 @@ pub trait Instruction {
 pub enum CPUError {
     MemoryOutOfBoundsAccess(u32),
     WriteToReadOnly(String),
+    WrongSizeInteger(M68kInteger),
 }
 
 pub struct CPU<M: Memory> {
