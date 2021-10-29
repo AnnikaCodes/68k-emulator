@@ -3,12 +3,13 @@
 //! Refer to http://www.scarpaz.com/Attic/Didattica/Scarpazza-2005-68k-1-addressing.pdf
 //! and http://faculty.cs.niu.edu/~winans/CS463/notes/amodes.pdf for reference on how these work.
 
+use crate::ram::Memory;
 use crate::{M68kInteger, OperandSize};
 
 use super::registers::*;
 use super::{CPUError, CPU};
 
-/// Index register scaling - the ONLY legal values for this are 1, 2, and 4.
+/// Index register scaling - the ONLY legal get_values for this are 1, 2, and 4.
 #[derive(Debug, Copy, Clone)]
 pub enum IndexScale {
     One = 1,
@@ -105,7 +106,7 @@ pub enum AddressMode {
     },
 }
 
-/// Gets the increment for a given register + value size
+/// Gets the increment for a given register + get_value size
 fn get_increment(register: AddressRegister, size: OperandSize) -> u32 {
     let minimum = match register {
         AddressRegister::A7 => 2,
@@ -120,7 +121,7 @@ fn get_increment(register: AddressRegister, size: OperandSize) -> u32 {
     }
 }
 
-/// Addresses a value at the RAM address in a register with displacement
+/// Addresses a get_value at the RAM address in a register with displacement
 fn address_register_indirect_with_displacement(
     cpu: &mut CPU<impl crate::ram::Memory>,
     register: Register,
@@ -131,7 +132,7 @@ fn address_register_indirect_with_displacement(
         .read(cpu.registers.get(register) + displacement, size)
 }
 
-/// Addresses a value at the RAM address in a register with indexing
+/// Addresses a get_value at the RAM address in a register with indexing
 fn address_register_indirect_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     address_register: Register,
@@ -151,7 +152,7 @@ fn address_register_indirect_indexed(
     }
 }
 
-/// Addresses a value at a given address with a postindex register
+/// Addresses a get_value at a given address with a postindex register
 fn address_ram_post_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     base_address: u32,
@@ -171,7 +172,7 @@ fn address_ram_post_indexed(
     )
 }
 
-/// Addresses a value at a given address with a preindex register
+/// Addresses a get_value at a given address with a preindex register
 fn address_ram_pre_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     base_address: u32,
@@ -190,8 +191,6 @@ fn address_ram_pre_indexed(
 }
 
 impl AddressMode {
-    // TODO: does this need to return more than a u32? Should it support getting bytes/words?
-    // (probably, but I'd like to see a basic long-only implementation first, to keep myself motivated)
     pub fn get_value(
         &self,
         cpu: &mut CPU<impl crate::ram::Memory>,
@@ -233,11 +232,11 @@ impl AddressMode {
             AddressMode::RegisterIndirectPostIncrement { register, size } => {
                 dbg!(size);
                 let address = cpu.registers.get_address_register(register);
-                let value = cpu.memory.read(address, size)?;
+                let get_value = cpu.memory.read(address, size)?;
                 dbg!(size);
                 cpu.registers
                     .set_address_register(register, address + get_increment(register, size));
-                Ok(value)
+                Ok(get_value)
             }
             AddressMode::RegisterIndirectPreDecrement { register, size } => {
                 let address =
@@ -344,6 +343,13 @@ impl AddressMode {
             ),
         }
     }
+
+    pub fn set_value(&self, cpu: &mut CPU<impl Memory>, new_value: M68kInteger) -> Result<(), CPUError> {
+        match *self {
+            AddressMode::Immediate { .. } => Err(CPUError::WriteToReadOnly(format!("can't write to constant value"))),
+            _ => unimplemented!("Setting value at addressing mode {:?}", self),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -351,8 +357,8 @@ mod tests {
     use super::*;
     use crate::ram::{Memory, VecBackedMemory};
 
-    // This saves us from having to hardcode lots of values or declare the same variables in each test function.
-    // It also means that we don't have to worry about typing the wrong value.
+    // This saves us from having to hardcode lots of get_values or declare the same variables in each test function.
+    // It also means that we don't have to worry about typing the wrong get_value.
     static ADDRESS: u32 = 0x42;
     static DISPLACEMENT: u16 = 0xA3;
     static OUTER_DISPLACEMENT: u16 = 0x1A;
@@ -360,84 +366,112 @@ mod tests {
     static ADDRESS_REGISTER: AddressRegister = AddressRegister::A0;
     static DATA_REGISTER: DataRegister = DataRegister::D0;
 
-    /// Runs test closure (|size: OperandSize, value: M68kInteger} { ... })
-    fn all_sizes(closure: impl Fn(OperandSize, M68kInteger) -> ()) {
-        closure(OperandSize::Byte, M68kInteger::Byte(0xAB));
-        closure(OperandSize::Word, M68kInteger::Word(0xDEAD));
-        closure(OperandSize::Long, M68kInteger::Long(0xFACEBEEF));
+    /// Runs test closure (|size: OperandSize, get_value1: M68kInteger, get_value2: M68kInteger } { ... })
+    fn all_sizes(closure: impl Fn(CPU::<VecBackedMemory>, OperandSize, M68kInteger, M68kInteger) -> Result<(), CPUError>) {
+        let cpu1 = CPU::<VecBackedMemory>::new(1_024);
+        let cpu2 = CPU::<VecBackedMemory>::new(1_024);
+        let cpu3 = CPU::<VecBackedMemory>::new(1_024);
+
+        closure(cpu1, OperandSize::Byte, M68kInteger::Byte(0xAB), M68kInteger::Byte(0x73)).unwrap();
+        closure(cpu2, OperandSize::Word, M68kInteger::Word(0xDEAD), M68kInteger::Word(0xABBA)).unwrap();
+        closure(cpu3, OperandSize::Long, M68kInteger::Long(0xFACEBEEF), M68kInteger::Long(0xAF7B3AD)).unwrap();
     }
 
     #[test]
     fn register_direct() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let address = AddressMode::RegisterDirect {
                 register: Register::Data(DATA_REGISTER),
                 size,
             };
 
-            cpu.registers.set_data_register(DATA_REGISTER, value);
-            assert_eq!(address.get_value(&mut cpu).unwrap(), value);
+            // get
+            cpu.registers.set_data_register(DATA_REGISTER, get_value);
+            assert_eq!(address.get_value(&mut cpu)?, get_value);
+
+            // set
+            address.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.registers.get_data_register(DATA_REGISTER), set_value.into());
+            Ok(())
         });
     }
 
     #[test]
     fn register_indirect() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let mode = AddressMode::RegisterIndirect {
                 register: ADDRESS_REGISTER,
                 size,
             };
 
-            cpu.memory.write(ADDRESS, value).unwrap();
+            cpu.memory.write(ADDRESS, get_value)?;
             cpu.registers
                 .set_address_register(ADDRESS_REGISTER, ADDRESS);
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(ADDRESS, size)?, set_value);
+            Ok(())
         });
     }
 
     #[test]
     fn register_indirect_with_postincrement() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let byte_offset = size.size_in_bytes();
             let mode = AddressMode::RegisterIndirectPostIncrement {
                 register: ADDRESS_REGISTER,
                 size,
             };
 
-            cpu.memory.write(ADDRESS, value).unwrap();
+            // get
+            cpu.memory.write(ADDRESS, get_value)?;
             cpu.registers
                 .set_address_register(ADDRESS_REGISTER, ADDRESS);
-
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
             assert_eq!(
                 cpu.registers.get_address_register(ADDRESS_REGISTER),
                 ADDRESS + byte_offset
             );
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(ADDRESS + byte_offset, size)?, set_value);
+            assert_eq!(
+                cpu.registers.get_address_register(ADDRESS_REGISTER),
+                ADDRESS + (byte_offset * 2)
+            );
+            Ok(())
         });
     }
 
     #[test]
     fn register_indirect_with_predecrement() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let byte_offset = size.size_in_bytes();
             let mode = AddressMode::RegisterIndirectPreDecrement {
                 register: ADDRESS_REGISTER,
                 size,
             };
 
-            cpu.memory.write(ADDRESS - byte_offset, value).unwrap();
+            // get
+            cpu.memory.write(ADDRESS - byte_offset, get_value).unwrap();
             cpu.registers
                 .set_address_register(ADDRESS_REGISTER, ADDRESS);
-
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            assert_eq!(mode.get_value(&mut cpu).unwrap(), get_value);
             assert_eq!(
                 cpu.registers.get_address_register(ADDRESS_REGISTER),
                 ADDRESS - byte_offset
             );
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(ADDRESS - byte_offset, size)?, set_value);
+            assert_eq!(
+                cpu.registers.get_address_register(ADDRESS_REGISTER),
+                ADDRESS - (byte_offset * 2)
+            );
+            Ok(())
         });
     }
 
@@ -450,6 +484,8 @@ mod tests {
             register: AddressRegister::A7,
             size: OperandSize::Byte,
         };
+
+        // get
         cpu.registers
             .set_address_register(AddressRegister::A7, ADDRESS);
         post_incr.get_value(&mut cpu).unwrap();
@@ -458,10 +494,19 @@ mod tests {
             ADDRESS + 2
         ); // not +1
 
+        // set
+        post_incr.set_value(&mut cpu, M68kInteger::Byte(1)).unwrap();
+        assert_eq!(
+            cpu.registers.get_address_register(AddressRegister::A7),
+            ADDRESS + 4
+        ); // not +2
+
         let pre_decr = AddressMode::RegisterIndirectPreDecrement {
             register: AddressRegister::A7,
             size: OperandSize::Byte,
         };
+
+        // get
         cpu.registers
             .set_address_register(AddressRegister::A7, ADDRESS);
         pre_decr.get_value(&mut cpu).unwrap();
@@ -469,30 +514,41 @@ mod tests {
             cpu.registers.get_address_register(AddressRegister::A7),
             ADDRESS - 2
         ); // not -1
+
+        // set
+        post_incr.set_value(&mut cpu, M68kInteger::Byte(1)).unwrap();
+        assert_eq!(
+            cpu.registers.get_address_register(AddressRegister::A7),
+            ADDRESS - 4
+        ); // not -2
     }
 
     #[test]
     fn register_indirect_with_displacement() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let mode = AddressMode::RegisterIndirectWithDisplacement {
                 displacement: DISPLACEMENT,
                 register: ADDRESS_REGISTER,
                 size,
             };
 
+            // get
             cpu.registers
                 .set_address_register(ADDRESS_REGISTER, ADDRESS);
             let addr = ADDRESS + DISPLACEMENT as u32;
-            cpu.memory.write(addr, value).unwrap();
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            cpu.memory.write(addr, get_value).unwrap();
+            assert_eq!(mode.get_value(&mut cpu).unwrap(), get_value);
+
+            // set
+            mode.set_value(&mut cpu,set_value)?;
+            assert_eq!(cpu.memory.read(addr, size)?, set_value);
+            Ok(())
         });
     }
 
     #[test]
     fn register_indirect_indexed() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let mode = AddressMode::RegisterIndirectIndexed {
                 address_register: ADDRESS_REGISTER,
                 index_register: Register::Data(DATA_REGISTER),
@@ -501,22 +557,26 @@ mod tests {
                 displacement: DISPLACEMENT,
             };
 
+            let addr = ADDRESS + DISPLACEMENT as u32 + (INDEX * 2);
+
+            // get
             cpu.registers
                 .set_address_register(ADDRESS_REGISTER, ADDRESS);
             cpu.registers.set_data_register(DATA_REGISTER, INDEX);
-            cpu.memory
-                .write(ADDRESS + DISPLACEMENT as u32 + (INDEX * 2), value)
-                .unwrap();
+            cpu.memory.write(addr, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
 
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(addr, size)?, set_value);
+            Ok(())
         });
     }
 
     #[test]
     fn memory_post_indexed() {
-        all_sizes(|size, value| {
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let initial_address = 0xAA;
-            let mut cpu = CPU::<VecBackedMemory>::new(350);
             let mode = AddressMode::MemoryPostIndexed {
                 base_displacement: DISPLACEMENT,
                 outer_displacement: OUTER_DISPLACEMENT,
@@ -535,16 +595,22 @@ mod tests {
             cpu.memory
                 .write_long(intermediate_address, ADDRESS)
                 .unwrap();
-            cpu.memory.write(operand_address, value).unwrap();
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+
+            // get
+            cpu.memory.write(operand_address, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(operand_address, size)?, set_value);
+            Ok(())
         });
     }
 
     #[test]
     fn memory_pre_indexed() {
-        all_sizes(|size, value| {
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let initial_address = 0xAA;
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
             let mode = AddressMode::MemoryPreIndexed {
                 base_displacement: DISPLACEMENT,
                 outer_displacement: OUTER_DISPLACEMENT,
@@ -559,37 +625,47 @@ mod tests {
             cpu.registers.set_data_register(DATA_REGISTER, INDEX);
 
             let intermediate_address = initial_address + DISPLACEMENT as u32 + (INDEX * 4);
-            cpu.memory
-                .write_long(intermediate_address, ADDRESS)
-                .unwrap();
+            cpu.memory.write_long(intermediate_address, ADDRESS)?;
 
             let operand_address = ADDRESS + OUTER_DISPLACEMENT as u32;
-            cpu.memory.write(operand_address, value).unwrap();
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+
+            // get
+            cpu.memory.write(operand_address, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(operand_address, size)?, set_value);
+            Ok(())
         });
     }
 
     #[test]
     fn program_counter_indirect_with_displacement() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let mode = AddressMode::ProgramCounterIndirectWithDisplacement {
                 displacement: DISPLACEMENT,
                 size,
             };
 
             cpu.registers.set(Register::ProgramCounter, ADDRESS);
-            cpu.memory
-                .write(ADDRESS + DISPLACEMENT as u32, value)
-                .unwrap();
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            let address = ADDRESS + DISPLACEMENT as u32;
+
+            // get
+            cpu.memory.write(address, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(address, size)?, set_value);
+
+            Ok(())
         });
     }
 
     #[test]
     fn program_counter_indirect_indexed() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let mode = AddressMode::ProgramCounterIndirectWithIndex {
                 displacement: DISPLACEMENT,
                 index_register: Register::Data(DATA_REGISTER),
@@ -600,18 +676,25 @@ mod tests {
             cpu.registers.set(Register::ProgramCounter, ADDRESS);
             cpu.registers.set_data_register(DATA_REGISTER, INDEX);
 
-            cpu.memory
-                .write(ADDRESS + DISPLACEMENT as u32 + (INDEX * 2), value)
-                .unwrap();
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            let address = ADDRESS + DISPLACEMENT as u32 + (INDEX * 2);
+            cpu.memory.write( address, get_value)?;
+
+            // get
+            cpu.memory.write(address, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(address, size)?, set_value);
+
+            Ok(())
         });
     }
 
     #[test]
     fn program_counter_memory_post_indexed() {
-        all_sizes(|size, value| {
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let initial_address = 0xAA;
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
             let mode = AddressMode::ProgramCounterMemoryIndirectPostIndexed {
                 base_displacement: DISPLACEMENT,
                 outer_displacement: OUTER_DISPLACEMENT,
@@ -627,19 +710,24 @@ mod tests {
             cpu.memory
                 .write_long(intermediate_address, ADDRESS)
                 .unwrap();
-            cpu.memory
-                .write(ADDRESS + (INDEX * 4) + OUTER_DISPLACEMENT as u32, value)
-                .unwrap();
+            let final_address = ADDRESS + (INDEX * 4) + OUTER_DISPLACEMENT as u32;
 
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            // get
+            cpu.memory.write(final_address, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(final_address, size)?, set_value);
+
+            Ok(())
         });
     }
 
     #[test]
     fn program_counter_memory_pre_indexed() {
-        all_sizes(|size, value| {
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let initial_address = 0xAA;
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
             let mode = AddressMode::ProgramCounterMemoryIndirectPreIndexed {
                 base_displacement: DISPLACEMENT,
                 outer_displacement: OUTER_DISPLACEMENT,
@@ -652,41 +740,66 @@ mod tests {
             cpu.registers.set_data_register(DATA_REGISTER, INDEX);
 
             let intermediate_address = initial_address + DISPLACEMENT as u32 + (INDEX * 4);
+            let final_address = ADDRESS + OUTER_DISPLACEMENT as u32;
             cpu.memory
-                .write_long(intermediate_address, ADDRESS)
-                .unwrap();
-            cpu.memory
-                .write(ADDRESS + OUTER_DISPLACEMENT as u32, value)
-                .unwrap();
+                .write_long(intermediate_address, ADDRESS)?;
 
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            // get
+            cpu.memory.write(final_address, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(final_address, size)?, set_value);
+
+            Ok(())
         });
     }
 
     #[test]
     fn absolute() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        all_sizes(|mut cpu, size, get_value, set_value| {
             let mode = AddressMode::Absolute {
                 address: ADDRESS,
                 size,
             };
 
-            cpu.memory.write(ADDRESS, value).unwrap();
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            // get
+            cpu.memory.write(ADDRESS, get_value)?;
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+
+            // set
+            mode.set_value(&mut cpu, set_value)?;
+            assert_eq!(cpu.memory.read(ADDRESS, size)?, set_value);
+
+            Ok(())
         });
     }
 
     #[test]
     fn immediate() {
-        all_sizes(|size, value| {
-            let mut cpu = CPU::<VecBackedMemory>::new(8192);
+        // Immediate doesn't need to set a get_value
+        all_sizes(|mut cpu, size, get_value, _| {
             let mode = AddressMode::Immediate {
-                value: value.into(),
+                value: get_value.into(),
                 size,
             };
 
-            assert_eq!(mode.get_value(&mut cpu).unwrap(), value);
+            assert_eq!(mode.get_value(&mut cpu)?, get_value);
+            Ok(())
         });
+    }
+
+    // It makes no sense to set the get_value in immediate addressing
+    #[test]
+    #[should_panic]
+    fn immediate_panic_on_set() {
+        let mut cpu = CPU::<VecBackedMemory>::new(1024);
+        let mode = AddressMode::Immediate {
+            value: 0xAA,
+            size: OperandSize::Byte,
+        };
+
+        mode.set_value(&mut cpu, M68kInteger::Byte(1)).unwrap();
     }
 }

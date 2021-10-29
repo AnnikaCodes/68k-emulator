@@ -86,3 +86,39 @@
 //! TRAPV (Trap on Overflow),
 //! TST (Test Operand),
 //! UNLK (Unlink)
+
+use crate::{cpu::{CPU, CPUError, addressing::AddressMode}, ram::Memory};
+
+use super::Instruction;
+
+// Can switch to an enum if perf is an issue
+struct Move {
+    source: AddressMode,
+    destination: AddressMode,
+}
+
+impl Instruction for Move {
+    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
+        unimplemented!();
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{OperandSize, cpu::{CPU, addressing::AddressMode}, ram::VecBackedMemory};
+
+    static ADDRESS: u32 = 0x40;
+    static VALUE: u32 = 0xDEADBEEF;
+
+    #[test]
+    fn move_instruction() {
+        let mut cpu = CPU::<VecBackedMemory>::new(1024);
+        let destination = AddressMode::Absolute { address: ADDRESS, size: OperandSize::Long };
+        let source = AddressMode::Immediate { value: VALUE, size: OperandSize::Long };
+        let instruction = Move { source, destination };
+
+        instruction.execute(&mut cpu).unwrap();
+        assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);
+    }
+}

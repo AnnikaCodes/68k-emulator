@@ -1,15 +1,31 @@
-// CPU emulation
+//! CPU emulation
+//!
+//!  Each CPU has its own file, so you can do things like
+//! ```
+//! use emulator::cpu::instructions::isa_68000;
+//! ```
+//! to only use the 68000 instructions.
+//!
+//! However, we don't support non-68000s yet, so it's not terribly relevant.
+
 use crate::{ram::Memory, M68kInteger};
 pub mod addressing;
-pub mod instructions;
+pub mod isa_68000;
 pub mod registers;
 use registers::*;
 
-use self::{addressing::AddressMode, instructions::Instruction};
+use self::addressing::AddressMode;
+
+
+/// A CPU instruction
+pub trait Instruction {
+    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError>;
+}
 
 #[derive(Debug)]
 pub enum CPUError {
     MemoryOutOfBoundsAccess(u32),
+    WriteToReadOnly(String),
 }
 
 pub struct CPU<M: Memory> {
