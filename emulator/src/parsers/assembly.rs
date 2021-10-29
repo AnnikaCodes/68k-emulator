@@ -8,17 +8,18 @@ use crate::cpu::{
 };
 use crate::OperandSize;
 
+#[derive(Default)]
 pub struct AssemblyInterpreter {}
 
 impl AssemblyInterpreter {
     pub fn new() -> Self {
-        AssemblyInterpreter {}
+        Self::default()
     }
 
     /// Parses an operand to an address
     ///
     /// TODO: figure out how different operand sizes are represented & handle accordingly in unit tests
-    fn parse_to_operand(op_string: &str, instruction: &String) -> Result<AddressMode, ParseError> {
+    fn parse_to_operand(op_string: &str, instruction: &str) -> Result<AddressMode, ParseError> {
         let mut chars = op_string.chars();
         let first = chars.next();
         match first {
@@ -37,7 +38,7 @@ impl AssemblyInterpreter {
                 if !op_string.ends_with(')') && !op_string.ends_with('+') {
                     return Err(ParseError::UnknownOperandFormat {
                         operand: op_string.to_string(),
-                        instruction: instruction.clone(),
+                        instruction: instruction.to_string(),
                     });
                 }
                 let op_string = op_string.replace(|c| c == '(' || c == ')', "");
@@ -63,7 +64,7 @@ impl AssemblyInterpreter {
                             _ => {
                                 return Err(ParseError::InvalidOperand {
                                     operand: op_string.to_string(),
-                                    instruction: instruction.clone(),
+                                    instruction: instruction.to_string(),
                                 })
                             }
                         };
@@ -71,7 +72,7 @@ impl AssemblyInterpreter {
                         if is_postincr && is_predecr {
                             Err(ParseError::UnknownOperandFormat {
                                 operand: op_string.to_string(),
-                                instruction: instruction.clone(),
+                                instruction: instruction.to_string(),
                             })
                         } else if is_postincr {
                             Ok(AddressMode::RegisterIndirectPostIncrement { register, size })
@@ -105,28 +106,28 @@ impl AssemblyInterpreter {
                             }
                             _ => Err(ParseError::InvalidOperand {
                                 operand: op_string.to_string(),
-                                instruction: instruction.clone(),
+                                instruction: instruction.to_string(),
                             }),
                         }
                     }
                     _ => Err(ParseError::UnknownOperandFormat {
                         operand: op_string.to_string(),
-                        instruction: instruction.clone(),
+                        instruction: instruction.to_string(),
                     }),
                 }
             }
             _ => Err(ParseError::UnknownOperandFormat {
                 operand: op_string.to_string(),
-                instruction: instruction.clone(),
+                instruction: instruction.to_string(),
             }),
         }
     }
 
     /// Parses a number
     fn parse_to_number(num: &str) -> Result<u32, ParseError> {
-        let parse_result = if num.starts_with('$') {
+        let parse_result = if let Some(hex_num) = num.strip_prefix('$') {
             // Hex
-            u32::from_str_radix(&num[1..], 16)
+            u32::from_str_radix(hex_num, 16)
         } else {
             num.parse::<u32>()
         };
