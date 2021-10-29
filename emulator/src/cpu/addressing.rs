@@ -10,14 +10,25 @@ use super::registers::*;
 use super::{CPUError, CPU};
 
 /// Index register scaling - the ONLY legal values for this are 1, 2, and 4.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum IndexScale {
     One = 1,
     Two = 2,
     Four = 4,
 }
 
-#[derive(Debug, Clone)] // remove if perf issue
+// TODO: is this correct? consult the docs!
+impl From<OperandSize> for IndexScale {
+    fn from(size: OperandSize) -> Self {
+        match size {
+            OperandSize::Byte => IndexScale::One,
+            OperandSize::Word => IndexScale::Two,
+            OperandSize::Long => IndexScale::Four,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)] // remove if perf issue
 pub enum AddressMode {
     // Register-based addressing
     RegisterDirect {

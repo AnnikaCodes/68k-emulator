@@ -5,14 +5,14 @@
 pub type RegisterValue = u32;
 
 /// The status register is smaller and has its own methods
-#[derive(Debug, Clone, Copy)] // remove if perf issue
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] // remove if perf issue
 pub enum Register {
     Data(DataRegister),
     Address(AddressRegister),
     ProgramCounter,
 }
 
-#[derive(Debug, Clone, Copy)] // remove if perf issue
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] // remove if perf issue
 pub enum DataRegister {
     D0,
     D1,
@@ -24,7 +24,7 @@ pub enum DataRegister {
     D7,
 }
 
-#[derive(Debug, Clone, Copy)] // remove if perf issue
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] // remove if perf issue
 pub enum AddressRegister {
     A0,
     A1,

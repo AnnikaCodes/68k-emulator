@@ -94,11 +94,11 @@ use crate::{
 
 use super::Instruction;
 
-
 // I don't like this, but it's better than a giant method with lots of enum matching...
 // ...I think?
 //
 // If perf is bad we can just do a big enum.
+#[derive(Debug, PartialEq)]
 pub enum InstructionFor68000 {
     Add(Add),
     Move(Move),
@@ -115,9 +115,10 @@ impl Instruction for InstructionFor68000 {
 }
 
 // Can switch to an enum if perf is an issue
+#[derive(Debug, PartialEq)]
 pub struct Move {
-    source: AddressMode,
-    destination: AddressMode,
+    pub source: AddressMode,
+    pub destination: AddressMode,
 }
 
 impl Instruction for Move {
@@ -127,6 +128,7 @@ impl Instruction for Move {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Add {
     source: AddressMode,
     destination: AddressMode,
@@ -139,6 +141,7 @@ impl Instruction for Add {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Subtract {
     source: AddressMode,
     destination: AddressMode,
