@@ -1,5 +1,7 @@
 //! Motorola 68k CPU emulation library.
 
+use std::ops::{Add, Sub};
+
 use cpu::CPUError;
 pub mod cpu;
 pub mod ram;
@@ -72,6 +74,38 @@ impl M68kInteger {
             Err(CPUError::WrongSizeInteger(*self))
         } else {
             Ok(())
+        }
+    }
+}
+
+impl Add for M68kInteger {
+    type Output = M68kInteger;
+
+    fn add(self, other: M68kInteger) -> M68kInteger {
+        match (self, other) {
+            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a.wrapping_add(b)),
+            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a.wrapping_add(b)),
+            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.wrapping_add(b)),
+            _ => panic!(
+                "M68kInteger::add: invalid operands {:?} and {:?}",
+                self, other
+            ),
+        }
+    }
+}
+
+impl Sub for M68kInteger {
+    type Output = M68kInteger;
+
+    fn sub(self, other: M68kInteger) -> M68kInteger {
+        match (self, other) {
+            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a.wrapping_sub(b)),
+            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a.wrapping_sub(b)),
+            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.wrapping_sub(b)),
+            _ => panic!(
+                "M68kInteger::sub: invalid operands {:?} and {:?}",
+                self, other
+            ),
         }
     }
 }

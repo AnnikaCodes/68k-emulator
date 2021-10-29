@@ -17,7 +17,7 @@ pub enum IndexScale {
     Four = 4,
 }
 
-#[derive(Debug)] // remove if perf issue
+#[derive(Debug, Clone)] // remove if perf issue
 pub enum AddressMode {
     // Register-based addressing
     RegisterDirect {
@@ -594,8 +594,6 @@ impl AddressMode {
                     new_value,
                 )
             }
-
-            _ => unimplemented!("Setting value at addressing mode {:?}", self),
         }
     }
 }

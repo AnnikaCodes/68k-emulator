@@ -102,7 +102,32 @@ struct Move {
 
 impl Instruction for Move {
     fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
-        unimplemented!();
+        let val = self.source.get_value(cpu)?;
+        self.destination.set_value(cpu, val)
+    }
+}
+
+struct Add {
+    source: AddressMode,
+    destination: AddressMode,
+}
+
+impl Instruction for Add {
+    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
+        let val = self.source.get_value(cpu)? + self.destination.get_value(cpu)?;
+        self.destination.set_value(cpu, val)
+    }
+}
+
+struct Subtract {
+    source: AddressMode,
+    destination: AddressMode,
+}
+
+impl Instruction for Subtract {
+    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
+        let val = self.source.get_value(cpu)? - self.destination.get_value(cpu)?;
+        self.destination.set_value(cpu, val)
     }
 }
 
@@ -112,14 +137,13 @@ mod test {
     use crate::{
         cpu::{addressing::AddressMode, CPU},
         ram::VecBackedMemory,
-        OperandSize,
+        M68kInteger, OperandSize,
     };
 
     static ADDRESS: u32 = 0x40;
     static VALUE: u32 = 0xDEADBEEF;
 
     #[test]
-    #[ignore = "unimplemented"]
     fn move_instruction() {
         let mut cpu = CPU::<VecBackedMemory>::new(1024);
         let destination = AddressMode::Absolute {
@@ -137,5 +161,62 @@ mod test {
 
         instruction.execute(&mut cpu).unwrap();
         assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);
+    }
+
+    #[test]
+    fn add_instruction() {
+        for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xFFFFFFFF, 1, 0x00000000u32)] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let source = AddressMode::Immediate {
+                value: a,
+                size: OperandSize::Long,
+            };
+            let destination = AddressMode::Absolute {
+                address: ADDRESS,
+                size: OperandSize::Long,
+            };
+            destination.set_value(cpu, M68kInteger::Long(b)).unwrap();
+
+            let instruction = Add {
+                source,
+                destination: destination.clone(),
+            };
+
+            instruction.execute(cpu).unwrap();
+            assert_eq!(
+                destination.get_value(cpu).unwrap(),
+                M68kInteger::Long(result)
+            );
+        }
+    }
+
+    #[test]
+    fn subtract_instruction() {
+        // 0x1 - 0x2 = 0xFFFFFFFF because of wrapping... as an i32 it would work.
+        for (a, b, result) in [(1, 2, 0xFFFFFFFF), (0, 0, 0), (20, 10, 10)] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let source = AddressMode::Immediate {
+                value: a,
+                size: OperandSize::Long,
+            };
+            let destination = AddressMode::Absolute {
+                address: ADDRESS,
+                size: OperandSize::Long,
+            };
+            destination.set_value(cpu, M68kInteger::Long(b)).unwrap();
+
+            let instruction = Subtract {
+                source,
+                destination: destination.clone(),
+            };
+
+            instruction.execute(cpu).unwrap();
+            assert_eq!(
+                destination.get_value(cpu).unwrap(),
+                M68kInteger::Long(result)
+            );
+        }
     }
 }
