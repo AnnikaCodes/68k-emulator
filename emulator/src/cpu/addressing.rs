@@ -9,7 +9,7 @@ use crate::{M68kInteger, OperandSize};
 use super::registers::*;
 use super::{CPUError, CPU};
 
-/// Index register scaling - the ONLY legal get_values for this are 1, 2, and 4.
+/// Index register scaling - the ONLY legal values for this are 1, 2, and 4.
 #[derive(Debug, Copy, Clone)]
 pub enum IndexScale {
     One = 1,
@@ -121,7 +121,7 @@ fn get_increment(register: AddressRegister, size: OperandSize) -> u32 {
     }
 }
 
-/// Addresses a get_value at the RAM address in a register with displacement
+/// Addresses a value at the RAM address in a register with displacement
 fn address_register_indirect_with_displacement(
     cpu: &mut CPU<impl crate::ram::Memory>,
     register: Register,
@@ -132,7 +132,7 @@ fn address_register_indirect_with_displacement(
         .read(cpu.registers.get(register) + displacement, size)
 }
 
-/// Addresses a get_value at the RAM address in a register with indexing
+/// Addresses a value at the RAM address in a register with indexing
 fn address_register_indirect_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     address_register: Register,
@@ -152,7 +152,7 @@ fn address_register_indirect_indexed(
     }
 }
 
-/// Addresses a get_value at a given address with a postindex register
+/// Addresses a value at a given address with a postindex register
 fn address_ram_post_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     base_address: u32,
@@ -172,7 +172,7 @@ fn address_ram_post_indexed(
     )
 }
 
-/// Addresses a get_value at a given address with a preindex register
+/// Addresses a value at a given address with a preindex register
 fn address_ram_pre_indexed(
     cpu: &mut CPU<impl crate::ram::Memory>,
     base_address: u32,
@@ -232,11 +232,11 @@ impl AddressMode {
             AddressMode::RegisterIndirectPostIncrement { register, size } => {
                 dbg!(size);
                 let address = cpu.registers.get_address_register(register);
-                let get_value = cpu.memory.read(address, size)?;
+                let value = cpu.memory.read(address, size)?;
                 dbg!(size);
                 cpu.registers
                     .set_address_register(register, address + get_increment(register, size));
-                Ok(get_value)
+                Ok(value)
             }
             AddressMode::RegisterIndirectPreDecrement { register, size } => {
                 let address =
@@ -357,8 +357,8 @@ mod tests {
     use super::*;
     use crate::ram::{Memory, VecBackedMemory};
 
-    // This saves us from having to hardcode lots of get_values or declare the same variables in each test function.
-    // It also means that we don't have to worry about typing the wrong get_value.
+    // This saves us from having to hardcode lots of values or declare the same variables in each test function.
+    // It also means that we don't have to worry about typing the wrong value.
     static ADDRESS: u32 = 0x42;
     static DISPLACEMENT: u16 = 0xA3;
     static OUTER_DISPLACEMENT: u16 = 0x1A;
@@ -366,7 +366,7 @@ mod tests {
     static ADDRESS_REGISTER: AddressRegister = AddressRegister::A0;
     static DATA_REGISTER: DataRegister = DataRegister::D0;
 
-    /// Runs test closure (|size: OperandSize, get_value1: M68kInteger, get_value2: M68kInteger } { ... })
+    /// Runs test closure (|size: OperandSize, get_value: M68kInteger, set_value: M68kInteger| { ... })
     fn all_sizes(closure: impl Fn(CPU::<VecBackedMemory>, OperandSize, M68kInteger, M68kInteger) -> Result<(), CPUError>) {
         let cpu1 = CPU::<VecBackedMemory>::new(1_024);
         let cpu2 = CPU::<VecBackedMemory>::new(1_024);
@@ -790,7 +790,7 @@ mod tests {
         });
     }
 
-    // It makes no sense to set the get_value in immediate addressing
+    // It makes no sense to set the value in immediate addressing
     #[test]
     #[should_panic]
     fn immediate_panic_on_set() {
