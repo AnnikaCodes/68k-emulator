@@ -437,9 +437,7 @@ impl AddressMode {
             }
 
             // Immediate
-            AddressMode::Immediate { .. } => Err(CPUError::WriteToReadOnly(format!(
-                "can't write to constant value"
-            ))),
+            AddressMode::Immediate { .. } => Err(CPUError::WriteToReadOnly("can't write to constant value".to_string())),
 
             // Register
             AddressMode::RegisterDirect { register, size } => {

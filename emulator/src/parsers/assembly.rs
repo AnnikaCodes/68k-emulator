@@ -1,8 +1,14 @@
 //! Parses assembly code
 
-use crate::cpu::{addressing::AddressMode, isa_68000::*};
-
 use super::{Interpreter, ParseError};
+use crate::OperandSize;
+use crate::{
+    cpu::{
+        addressing::AddressMode,
+        isa_68000::*,
+        registers::{AddressRegister, DataRegister, Register},
+    },
+};
 
 pub struct AssemblyInterpreter {}
 
@@ -14,8 +20,98 @@ impl AssemblyInterpreter {
     /// Parses an operand to an address
     ///
     /// TODO: figure out how different operand sizes are represented & handle accordingly in unit tests
-    fn parse_to_operand(op_string: &str) -> Result<AddressMode, ParseError> {
-        unimplemented!();
+    fn parse_to_operand(op_string: &str, instruction: &String) -> Result<AddressMode, ParseError> {
+        let mut chars = op_string.chars();
+        let first = chars.next();
+        match first {
+            // Register Direct
+            Some('d' | 'a' | 's') => Ok(AddressMode::RegisterDirect {
+                register: Self::parse_to_register(op_string)?,
+                size: OperandSize::Long,
+            }),
+            // Immediate
+            Some('#') => Ok(AddressMode::Immediate {
+                value: Self::parse_to_number(&op_string[1..])?,
+                size: OperandSize::Long,
+            }),
+            _ => Err(ParseError::UnknownOperandFormat {
+                operand: op_string.to_string(),
+                instruction: instruction.clone(),
+            }),
+        }
+    }
+
+    /// Parses a number
+    fn parse_to_number(num: &str) -> Result<u32, ParseError> {
+        let parse_result = if num.starts_with('$') {
+            // Hex
+            u32::from_str_radix(&num[1..], 16)
+        } else {
+            num.parse::<u32>()
+        };
+
+        match parse_result {
+            Ok(num) => Ok(num),
+            Err(error) => Err(ParseError::InvalidNumber {
+                number: num.to_string(),
+                error,
+            }),
+        }
+    }
+
+    /// Parses a string to a register
+    fn parse_to_register(register: &str) -> Result<Register, ParseError> {
+        match register {
+            "d0" => Ok(Register::Data(DataRegister::D0)),
+            "d1" => Ok(Register::Data(DataRegister::D1)),
+            "d2" => Ok(Register::Data(DataRegister::D2)),
+            "d3" => Ok(Register::Data(DataRegister::D3)),
+            "d4" => Ok(Register::Data(DataRegister::D4)),
+            "d5" => Ok(Register::Data(DataRegister::D5)),
+            "d6" => Ok(Register::Data(DataRegister::D6)),
+            "d7" => Ok(Register::Data(DataRegister::D7)),
+
+            "a0" => Ok(Register::Address(AddressRegister::A0)),
+            "a1" => Ok(Register::Address(AddressRegister::A1)),
+            "a2" => Ok(Register::Address(AddressRegister::A2)),
+            "a3" => Ok(Register::Address(AddressRegister::A3)),
+            "a4" => Ok(Register::Address(AddressRegister::A4)),
+            "a5" => Ok(Register::Address(AddressRegister::A5)),
+            "a6" => Ok(Register::Address(AddressRegister::A6)),
+            "a7" | "sp" => Ok(Register::Address(AddressRegister::A7)),
+
+            _ => Err(ParseError::UnknownRegister(register.to_string())),
+        }
+    }
+
+    /// Parses source and destination operands
+    fn parse_source_dest(
+        op_string: &str,
+        instruction: String,
+    ) -> Result<(AddressMode, AddressMode), ParseError> {
+        let mut paren_level: u32 = 0;
+        for (idx, token) in op_string.chars().enumerate() {
+            match token {
+                '(' => paren_level += 1,
+                ')' => {
+                    if paren_level == 0 {
+                        return Err(ParseError::UnexpectedToken { token, instruction });
+                    }
+                    paren_level -= 1;
+                }
+                // Commas within parentheticals do NOT demarcate the boundary between source and destination operands;
+                // they are part of the assembly representation of certain addressing modes.
+                ',' if paren_level == 0 => {
+                    let (source_asm, dest_asm) = op_string.split_at(idx);
+                    let source = Self::parse_to_operand(source_asm, &instruction)?;
+                    let destination = Self::parse_to_operand(dest_asm, &instruction)?;
+                    return Ok((source, destination));
+                }
+                _ => {}
+            }
+        }
+
+        Err(ParseError::MissingOperand(instruction))
     }
 }
 
@@ -31,15 +127,8 @@ impl Interpreter<String> for AssemblyInterpreter {
             "add" => unimplemented!(),
             "sub" => unimplemented!(),
             "move" => {
-                let (source_token, destination_token) = rest
-                    // TODO: this doesnt actually work, as addressing can include commas....
-                    // We probably need to iterate over `rest` and ignore stuff inside parens until we find a comma,
-                    // then split at the index.
-                    .split_once(',')
-                    .ok_or(ParseError::MissingOperand(source))?;
-                let source_addr = AssemblyInterpreter::parse_to_operand(source_token)?;
-                let destination_addr = AssemblyInterpreter::parse_to_operand(destination_token)?;
-
+                let (source_addr, destination_addr) =
+                    AssemblyInterpreter::parse_source_dest(rest, source)?;
                 Ok(InstructionFor68000::Move(Move {
                     source: source_addr,
                     destination: destination_addr,
@@ -59,6 +148,11 @@ mod tests {
         cpu::registers::{AddressRegister, DataRegister, Register::*},
         OperandSize::*,
     };
+    use lazy_static::lazy_static;
+
+    lazy_static! {
+        static ref DUMMY_INSTRUCTION: String = String::from("Test instruction");
+    }
 
     #[test]
     #[ignore = "not yet implemented"]
@@ -85,7 +179,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_register_direct() {
         for (operand, register) in [
             ("d0", Data(DataRegister::D0)),
@@ -94,7 +187,7 @@ mod tests {
             ("sp", Address(AddressRegister::A7)),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::RegisterDirect {
                     register,
                     size: Long,
@@ -112,7 +205,7 @@ mod tests {
             ("(sp)", AddressRegister::A7),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::RegisterIndirect {
                     register,
                     size: Long,
@@ -130,7 +223,7 @@ mod tests {
             ("(sp)+", AddressRegister::A7),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::RegisterIndirectPostIncrement {
                     register,
                     size: Long,
@@ -148,7 +241,7 @@ mod tests {
             ("-(sp)", AddressRegister::A7),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::RegisterIndirectPreDecrement {
                     register,
                     size: Long,
@@ -166,7 +259,7 @@ mod tests {
             ("(952, sp)", 952, AddressRegister::A7),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::RegisterIndirectWithDisplacement {
                     register,
                     displacement,
@@ -203,7 +296,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::RegisterIndirectIndexed {
                     address_register,
                     index_register,
@@ -252,7 +345,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::MemoryPostIndexed {
                     address_register,
                     index_register,
@@ -302,7 +395,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::MemoryPreIndexed {
                     address_register,
                     index_register,
@@ -324,7 +417,7 @@ mod tests {
             ("(952, pc, d5.l)", 952, Data(DataRegister::D5), Long),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::ProgramCounterIndirectWithIndex {
                     index_register,
                     index_scale: size.into(),
@@ -350,7 +443,7 @@ mod tests {
             ("([952,pc], d5.l,1)", 952, 1, Data(DataRegister::D5), Long),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::ProgramCounterMemoryIndirectPostIndexed {
                     index_register,
                     index_scale: size.into(),
@@ -377,7 +470,7 @@ mod tests {
             ("([952, pc, d5.l], 1)", 952, 1, Data(DataRegister::D5), Long),
         ] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::ProgramCounterMemoryIndirectPreIndexed {
                     index_register,
                     index_scale: size.into(),
@@ -394,20 +487,19 @@ mod tests {
     fn parse_to_operand_absolute() {
         for (operand, address, size) in [("($400).w", 0x400, Word), ("($b4a).l", 0xB4A, Long)] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 AddressMode::Absolute { address, size }
             );
         }
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_immediate() {
         // TODO: should this be a byte, word, or long?
-        for (operand, address, size) in [("#$400", 0x400, Word)] {
+        for (operand, value, size) in [("#$400", 0x400, Long)] {
             assert_eq!(
-                AssemblyInterpreter::parse_to_operand(operand).unwrap(),
-                AddressMode::Absolute { address, size }
+                AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
+                AddressMode::Immediate { value, size }
             );
         }
     }

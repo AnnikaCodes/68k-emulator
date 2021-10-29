@@ -3,6 +3,8 @@
 //!
 //! Any struct that implements the [`Parser`] trait can be used as a parser.
 
+use std::num::ParseIntError;
+
 use crate::cpu::isa_68000::InstructionFor68000;
 pub mod assembly;
 
@@ -10,7 +12,20 @@ pub mod assembly;
 pub enum ParseError {
     NoInstruction(String),
     UnknownInstruction(String),
+    UnknownRegister(String),
     MissingOperand(String),
+    UnknownOperandFormat {
+        operand: String,
+        instruction: String,
+    },
+    UnexpectedToken {
+        token: char,
+        instruction: String,
+    },
+    InvalidNumber {
+        number: String,
+        error: ParseIntError,
+    },
 }
 
 /// A parser
