@@ -99,6 +99,7 @@ pub enum ISA68000 {
     Add { src: AddressMode, dest: AddressMode },
     Subtract { src: AddressMode, dest: AddressMode },
     Move { src: AddressMode, dest: AddressMode },
+    MultiplyUnsigned { src: AddressMode, dest: AddressMode },
 }
 
 impl InstructionSet for ISA68000 {
@@ -110,6 +111,10 @@ impl InstructionSet for ISA68000 {
             }
             ISA68000::Subtract { src, dest } => {
                 let val = src.get_value(cpu)? - dest.get_value(cpu)?;
+                dest.set_value(cpu, val)
+            }
+            ISA68000::MultiplyUnsigned { src, dest } => {
+                let val = src.get_value(cpu)?.wrapping_mul(dest.get_value(cpu)?);
                 dest.set_value(cpu, val)
             }
             ISA68000::Move { src, dest } => {
@@ -191,6 +196,36 @@ mod test {
             dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
 
             let instruction = ISA68000::Subtract {
+                src,
+                dest: dest.clone(),
+            };
+
+            instruction.execute(cpu).unwrap();
+            assert_eq!(dest.get_value(cpu).unwrap(), M68kInteger::Long(result));
+        }
+    }
+
+    #[test]
+    fn multiply_unsigned_instruction() {
+        for (a, b, result) in [
+            (1u32, 2u32, 2u32),
+            (0, 0, 0),
+            (20, 10, 200),
+            (0x80000000, 2, 0),
+        ] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let src = AddressMode::Immediate {
+                value: a,
+                size: OperandSize::Long,
+            };
+            let dest = AddressMode::Absolute {
+                address: ADDRESS,
+                size: OperandSize::Long,
+            };
+            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
+
+            let instruction = ISA68000::MultiplyUnsigned {
                 src,
                 dest: dest.clone(),
             };

@@ -77,6 +77,19 @@ impl M68kInteger {
             Ok(())
         }
     }
+
+    pub fn wrapping_mul(self, other: M68kInteger) -> M68kInteger {
+        match (self, other) {
+            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a.wrapping_mul(b)),
+            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a.wrapping_mul(b)),
+            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.wrapping_mul(b)),
+            // TODO: this should probably not panic
+            _ => panic!(
+                "M68kInteger::wrapping_mul: invalid operands {:?} and {:?}",
+                self, other
+            ),
+        }
+    }
 }
 
 impl Add for M68kInteger {
