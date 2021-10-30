@@ -1,5 +1,7 @@
 //! Parses assembly code
 
+use std::fs::OpenOptions;
+
 use super::{Interpreter, ParseError};
 use crate::cpu::{
     addressing::AddressMode,
@@ -7,6 +9,13 @@ use crate::cpu::{
     registers::{AddressRegister, DataRegister, Register},
 };
 use crate::OperandSize;
+
+fn to_u16(int: u32) -> Result<u16, ParseError> {
+    match int.try_into() {
+        Ok(d) => Ok(d),
+        Err(error) => return Err(ParseError::NumberTooLarge(error)),
+    }
+}
 
 #[derive(Default)]
 pub struct AssemblyInterpreter {}
@@ -24,10 +33,10 @@ impl AssemblyInterpreter {
         let first = chars.next();
         match first {
             // Register Direct
-            Some('d' | 'a' | 's') => Ok(AddressMode::RegisterDirect {
-                register: Self::parse_to_register(op_string)?,
-                size: OperandSize::Long,
-            }),
+            Some('d' | 'a' | 's') => {
+                let (register, size) = Self::parse_to_register(op_string)?;
+                Ok(AddressMode::RegisterDirect { register, size })
+            },
             // Immediate
             Some('#') => Ok(AddressMode::Immediate {
                 value: Self::parse_to_number(&op_string[1..])?,
@@ -35,14 +44,16 @@ impl AssemblyInterpreter {
             }),
             // Indirect Stuff
             Some('(' | '-') => {
+                // + is for postincrement
                 if !op_string.ends_with(')') && !op_string.ends_with('+') {
                     return Err(ParseError::UnknownOperandFormat {
                         operand: op_string.to_string(),
                         instruction: instruction.to_string(),
                     });
                 }
+
                 let op_string = op_string.replace(|c| c == '(' || c == ')', "");
-                let parts = op_string.split(',').collect::<Vec<&str>>();
+                let mut parts = op_string.split(',').collect::<Vec<&str>>();
                 match parts.len() {
                     // Register Indirect potentially with postincr/predecr
                     1 => {
@@ -60,7 +71,7 @@ impl AssemblyInterpreter {
                         }
 
                         let (register, size) = match Self::parse_to_register(register)? {
-                            Register::Address(reg) => (reg, OperandSize::Long),
+                            (Register::Address(reg), size) => (reg, size),
                             _ => {
                                 return Err(ParseError::InvalidOperand {
                                     operand: op_string.to_string(),
@@ -85,29 +96,124 @@ impl AssemblyInterpreter {
                     // Displacement
                     2 => {
                         let (displacement, register) = (parts[0].trim(), parts[1].trim());
-                        let displacement = match Self::parse_to_number(displacement)?.try_into() {
-                            Ok(d) => d,
-                            Err(error) => return Err(ParseError::NumberTooLarge(error)),
-                        };
+                        let displacement = to_u16(Self::parse_to_number(displacement)?)?;
 
                         match Self::parse_to_register(register)? {
-                            Register::Address(reg) => {
+                            (Register::Address(reg), size) => {
                                 Ok(AddressMode::RegisterIndirectWithDisplacement {
                                     displacement,
                                     register: reg,
-                                    size: OperandSize::Long,
+                                    size,
                                 })
                             }
-                            Register::ProgramCounter => {
+                            (Register::ProgramCounter, size) => {
                                 Ok(AddressMode::ProgramCounterIndirectWithDisplacement {
                                     displacement,
-                                    size: OperandSize::Long,
+                                    size,
                                 })
                             }
                             _ => Err(ParseError::InvalidOperand {
                                 operand: op_string.to_string(),
                                 instruction: instruction.to_string(),
                             }),
+                        }
+                    }
+                    // Indexed indirect addressing
+                    3 | 4 if parts[0].starts_with('[') => {
+                        let mut for_ia: Vec<&str> = vec![];
+
+                        while let part = parts.remove(0) {
+                            if let Some(part) = part.strip_suffix("]") {
+                                for_ia.push(part);
+                                break;
+                            }
+                            for_ia.push(part);
+                        }
+
+                        let is_preindexed = for_ia.len() == 3;
+                        if for_ia.len() < 2 || for_ia.len() > 3 {
+                            return Err(ParseError::UnknownOperandFormat {
+                                operand: op_string.to_string(),
+                                instruction: instruction.to_string(),
+                            });
+                        }
+
+                        let base_displacement: u16 = to_u16( Self::parse_to_number(for_ia[0].trim_start_matches('['))?)?;
+                        let address_register: Register = match Self::parse_to_register(for_ia[1].trim()) {
+                            Ok((reg, _)) => reg,
+                            _ => return Err(ParseError::InvalidOperand {
+                                operand: op_string.to_string(),
+                                instruction: instruction.to_string(),
+                            })
+                        };
+
+                        let idxreg_asm = if is_preindexed {
+                            for_ia[2]
+                        } else {
+                            match parts.get(0) {
+                                Some(displacement) => displacement,
+                                None => return Err(ParseError::InvalidOperand {
+                                    operand: op_string.to_string(),
+                                    instruction: instruction.to_string(),
+                                }),
+                            }
+                        };
+
+                        let (index_register, size) = match Self::parse_to_register(idxreg_asm.trim()) {
+                            Ok(reg) => reg,
+                            _ => return Err(ParseError::InvalidOperand {
+                                operand: op_string.to_string(),
+                                instruction: instruction.to_string(),
+                            })
+                        };
+                        let outer_displacement = match parts.pop() {
+                            Some(displacement) => to_u16(Self::parse_to_number(displacement.trim())?)?,
+                            None => 0,
+                        };
+                        if is_preindexed {
+                            match address_register {
+                                Register::Address(reg) => Ok(AddressMode::MemoryPreIndexed {
+                                    base_displacement,
+                                    address_register: reg,
+                                    index_register,
+                                    index_scale: size.into(),
+                                    outer_displacement,
+                                    size,
+                                }),
+                                Register::ProgramCounter => Ok(AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+                                    base_displacement,
+                                    index_register,
+                                    index_scale: size.into(),
+                                    outer_displacement,
+                                    size,
+                                }),
+                                _ => Err(ParseError::InvalidOperand {
+                                    operand: op_string.to_string(),
+                                    instruction: instruction.to_string(),
+                                }),
+                            }
+                        } else {
+                            match address_register {
+                                Register::Address(reg) => Ok(AddressMode::MemoryPostIndexed {
+                                    base_displacement,
+                                    address_register: reg,
+                                    index_register,
+                                    index_scale: size.into(),
+                                    outer_displacement,
+                                    size,
+                                }),
+                                Register::ProgramCounter => Ok(AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+                                    base_displacement,
+                                    index_register,
+                                    index_scale: size.into(),
+                                    outer_displacement,
+                                    size,
+                                }),
+                                _ => Err(ParseError::InvalidOperand {
+                                    operand: op_string.to_string(),
+                                    instruction: instruction.to_string(),
+                                }),
+                            }
                         }
                     }
                     _ => Err(ParseError::UnknownOperandFormat {
@@ -141,8 +247,21 @@ impl AssemblyInterpreter {
         }
     }
 
+    /// Parses a string to a register and size
+    fn parse_to_register(register: &str) -> Result<(Register, OperandSize), ParseError> {
+        if let Some(register) = register.strip_suffix(".b") {
+            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Byte))
+        } else if let Some(register) = register.strip_suffix(".w") {
+            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Word))
+        } else if let Some(register) = register.strip_suffix(".l") {
+            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Long))
+        } else {
+            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Long))
+        }
+    }
+
     /// Parses a string to a register
-    fn parse_to_register(register: &str) -> Result<Register, ParseError> {
+    fn parse_to_register_no_size(register: &str) -> Result<Register, ParseError> {
         match register {
             "d0" => Ok(Register::Data(DataRegister::D0)),
             "d1" => Ok(Register::Data(DataRegister::D1)),
@@ -407,7 +526,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_memory_postindexed() {
         for (
             operand,
@@ -457,7 +575,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_memory_preindexed() {
         for (
             operand,
@@ -541,7 +658,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_pc_indirect_postindexed() {
         for (operand, base_displacement, outer_displacement, index_register, size) in [
             ("([1,pc], d3.b, 2)", 1, 2, Data(DataRegister::D3), Byte),
@@ -568,7 +684,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_pc_preindexed() {
         for (operand, base_displacement, outer_displacement, index_register, size) in [
             ("([1,pc,d3.b], 2)", 1, 2, Data(DataRegister::D3), Byte),
