@@ -83,7 +83,7 @@ pub enum AddressMode {
         displacement: u16,
         size: OperandSize,
     },
-    ProgramCounterIndirectWithIndex {
+    ProgramCounterIndirectIndexed {
         displacement: u16,
         index_register: Register,
         index_scale: IndexScale,
@@ -336,7 +336,7 @@ impl AddressMode {
                     size,
                 )
             }
-            AddressMode::ProgramCounterIndirectWithIndex {
+            AddressMode::ProgramCounterIndirectIndexed {
                 displacement,
                 index_register,
                 index_scale,
@@ -513,7 +513,7 @@ impl AddressMode {
                     new_value,
                 )
             }
-            AddressMode::ProgramCounterIndirectWithIndex {
+            AddressMode::ProgramCounterIndirectIndexed {
                 displacement,
                 index_register,
                 index_scale,
@@ -954,7 +954,7 @@ mod tests {
     #[test]
     fn program_counter_indirect_indexed() {
         all_sizes(|mut cpu, size, get_value, set_value| {
-            let mode = AddressMode::ProgramCounterIndirectWithIndex {
+            let mode = AddressMode::ProgramCounterIndirectIndexed {
                 displacement: DISPLACEMENT,
                 index_register: Register::Data(DATA_REGISTER),
                 index_scale: IndexScale::Two,

@@ -13,6 +13,11 @@ pub enum ParseError {
     NoInstruction(String),
     UnknownInstruction(String),
     UnknownRegister(String),
+    InvalidRegister {
+        register: String,
+        instruction: String,
+        reason: String,
+    },
     InvalidOperand {
         operand: String,
         instruction: String,

@@ -42,8 +42,17 @@ impl AssemblyInterpreter {
                 value: Self::parse_to_number(&op_string[1..])?,
                 size: OperandSize::Long,
             }),
-            // Indirect Stuff
+            // Indirect Stuff + Absolute
             Some('(' | '-') => {
+                // Absolute
+                if !op_string.contains(',') { // if it includes a comma, it's not an absolute address
+                    if let Some('$' | '0'..='9') = chars.next() {
+                        let (address_asm, size) = Self::parse_size_suffix(op_string)?;
+                        let address = Self::parse_to_number(&address_asm.replace(|c| c == '(' || c == ')', ""))?;
+                        return Ok(AddressMode::Absolute { address, size })
+                    }
+                }
+
                 // + is for postincrement
                 if !op_string.ends_with(')') && !op_string.ends_with('+') {
                     return Err(ParseError::UnknownOperandFormat {
@@ -51,6 +60,7 @@ impl AssemblyInterpreter {
                         instruction: instruction.to_string(),
                     });
                 }
+
 
                 let op_string = op_string.replace(|c| c == '(' || c == ')', "");
                 let mut parts = op_string.split(',').collect::<Vec<&str>>();
@@ -118,7 +128,33 @@ impl AssemblyInterpreter {
                             }),
                         }
                     }
-                    // Indexed indirect addressing
+                    // Register/PC indirect with index
+                    3 if !parts[0].starts_with('[') => {
+                        let displacement = to_u16(Self::parse_to_number(parts[0].trim())?)?;
+                        let address_register = Self::parse_to_register_no_size(parts[1].trim())?;                        let (index_register, size) = Self::parse_to_register(parts[2].trim())?;
+
+                        match address_register {
+                            Register::Address(reg) => Ok(AddressMode::RegisterIndirectIndexed {
+                                displacement,
+                                address_register: reg,
+                                index_register,
+                                index_scale: size.into(),
+                                size,
+                            }),
+                            Register::ProgramCounter => Ok(AddressMode::ProgramCounterIndirectIndexed {
+                                displacement,
+                                index_register,
+                                index_scale: size.into(),
+                                size,
+                            }),
+                            _ => Err(ParseError::InvalidRegister {
+                                register: parts[1].to_string(),
+                                instruction: instruction.to_string(),
+                                reason: String::from("Expected address register or program counter"),
+                            }),
+                        }
+                    }
+                    // Memory indexed indirect addressing with post/preindex
                     3 | 4 if parts[0].starts_with('[') => {
                         let mut for_ia: Vec<&str> = vec![];
 
@@ -237,7 +273,6 @@ impl AssemblyInterpreter {
         } else {
             num.parse::<u32>()
         };
-
         match parse_result {
             Ok(num) => Ok(num),
             Err(error) => Err(ParseError::InvalidNumber {
@@ -249,14 +284,20 @@ impl AssemblyInterpreter {
 
     /// Parses a string to a register and size
     fn parse_to_register(register: &str) -> Result<(Register, OperandSize), ParseError> {
-        if let Some(register) = register.strip_suffix(".b") {
-            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Byte))
-        } else if let Some(register) = register.strip_suffix(".w") {
-            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Word))
-        } else if let Some(register) = register.strip_suffix(".l") {
-            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Long))
+        let (reg, size) = Self::parse_size_suffix(register)?;
+        Ok((Self::parse_to_register_no_size(reg)?, size))
+    }
+
+    /// Gets a size suffix
+    fn parse_size_suffix(operand: &str) -> Result<(&str, OperandSize), ParseError> {
+        if let Some(operand) = operand.strip_suffix(".b") {
+            Ok((operand, OperandSize::Byte))
+        } else if let Some(operand) = operand.strip_suffix(".w") {
+            Ok((operand, OperandSize::Word))
+        } else if let Some(operand) = operand.strip_suffix(".l") {
+            Ok((operand, OperandSize::Long))
         } else {
-            Ok((Self::parse_to_register_no_size(register)?, OperandSize::Long))
+            Ok((operand, OperandSize::Long))
         }
     }
 
@@ -487,7 +528,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_register_indirect_indexed() {
         for (operand, displacement, address_register, index_register, size) in [
             (
@@ -638,7 +678,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_pc_indirect_indexed() {
         for (operand, displacement, index_register, size) in [
             ("(1, pc, d3.b)", 1, Data(DataRegister::D3), Byte),
@@ -647,7 +686,7 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::ProgramCounterIndirectWithIndex {
+                AddressMode::ProgramCounterIndirectIndexed {
                     index_register,
                     index_scale: size.into(),
                     displacement,
@@ -710,7 +749,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "not yet implemented"]
     fn parse_to_operand_absolute() {
         for (operand, address, size) in [("($400).w", 0x400, Word), ("($b4a).l", 0xB4A, Long)] {
             assert_eq!(
