@@ -2,6 +2,10 @@
 //!
 //! There are 7 data registers, 7 address registers, a program counter, and the status register.
 
+use std::fmt::Display;
+
+use crate::{hex_format_long, hex_format_word};
+
 pub type RegisterValue = u32;
 
 /// The status register is smaller and has its own methods
@@ -156,5 +160,25 @@ impl Registers {
 
     pub fn set_status_register(&mut self, new_value: u16) {
         self.status = new_value;
+    }
+}
+
+impl Display for Registers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "A0: 0x{} | A1: 0x{} | A2: 0x{} | A3: 0x{} | A4: 0x{} | A5: 0x{} | A6: 0x{} | A7: 0x{}",
+            hex_format_long(self.a0), hex_format_long(self.a1), hex_format_long(self.a2),
+            hex_format_long(self.a3), hex_format_long(self.a4), hex_format_long(self.a5),
+            hex_format_long(self.a6), hex_format_long(self.a7)
+        )?;
+        writeln!(
+            f,
+            "D0: 0x{} | D1: 0x{} | D2: 0x{} | D3: 0x{} | D4: 0x{} | D5: 0x{} | D6: 0x{} | D7: 0x{}",
+            hex_format_long(self.d0), hex_format_long(self.d1), hex_format_long(self.d2),
+            hex_format_long(self.d3), hex_format_long(self.d4), hex_format_long(self.d5),
+            hex_format_long(self.d6), hex_format_long(self.d7)
+        )?;
+        writeln!(f, "Program Counter: 0x{} | Status: 0x{}", hex_format_long(self.pc), hex_format_word(self.status))
     }
 }

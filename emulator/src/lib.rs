@@ -123,3 +123,15 @@ impl Sub for M68kInteger {
         }
     }
 }
+
+pub fn hex_format_byte(byte: u8) -> String {
+    format!("{:02X}", byte)
+}
+
+pub fn hex_format_word(word: u16) -> String {
+    format!("{:04X}", word)
+}
+
+pub fn hex_format_long(long: u32) -> String {
+    format!("{:08X}", long)
+}

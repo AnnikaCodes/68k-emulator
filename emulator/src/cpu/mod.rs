@@ -8,6 +8,8 @@
 //!
 //! However, we don't support non-68000s yet, so it's not terribly relevant.
 
+use std::fmt::Display;
+
 use crate::{ram::Memory, M68kInteger};
 pub mod addressing;
 pub mod isa_68000;
@@ -33,6 +35,13 @@ pub struct CPU<M: Memory> {
     pub memory: M,
 }
 
+impl<M> Default for CPU<M> where M: Memory {
+    fn default() -> Self {
+        Self::new(1024)
+    }
+}
+
+
 impl<M> CPU<M>
 where
     M: Memory,
@@ -51,5 +60,14 @@ where
 
     pub fn get_address_value(&mut self, addr: AddressMode) -> Result<M68kInteger, CPUError> {
         addr.get_value(self)
+    }
+}
+
+impl<M> Display for CPU<M>
+where
+    M: Memory,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}{}", self.registers, self.memory)
     }
 }

@@ -1,8 +1,10 @@
-use crate::{cpu::CPUError, M68kInteger, OperandSize};
+use std::fmt::Display;
+
+use crate::{cpu::CPUError, M68kInteger, OperandSize, hex_format_byte};
 
 // Emulation of Random-Access Memory (RAM)
 
-pub trait Memory {
+pub trait Memory: Display {
     fn new(size_in_bytes: usize) -> Self;
 
     fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError>;
@@ -22,6 +24,47 @@ pub trait Memory {
 pub struct VecBackedMemory {
     random_access_buf: Vec<u8>,
     // TODO: implement memory mapping
+}
+
+impl Display for VecBackedMemory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // remove long stretches of 0s
+        let mut showed_last = false;
+        let interesting_memory =
+            self.random_access_buf
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, byte)| {
+                    if self.random_access_buf.get(idx + 1) != Some(&0)
+                        || idx == 0
+                        || self.random_access_buf.get(idx - 1) != Some(&0)
+                    {
+                        // Show the first and last zero bytes in a zero-sequence
+                        showed_last = true;
+                        Some(hex_format_byte(*byte))
+                    } else if *byte == 0 && showed_last {
+                        // Replace first zero byte with a ...
+                        showed_last = false;
+                        Some(String::from("..."))
+                    } else if *byte == 0
+                        && self.random_access_buf.get(idx + 1) == Some(&0)
+                        && self.random_access_buf.get(idx - 1) == Some(&0)
+                    {
+                        // Zero byte
+                        showed_last = false;
+                        None
+                    } else {
+                        showed_last = true;
+                        Some(hex_format_byte(*byte))
+                    }
+                });
+
+        write!(
+            f,
+            "RAM (Vec-backed): {}",
+            interesting_memory.collect::<Vec<_>>().join(" ")
+        )
+    }
 }
 
 impl Memory for VecBackedMemory {
