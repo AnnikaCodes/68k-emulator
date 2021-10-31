@@ -3,12 +3,46 @@
   <head>
     <meta charset="utf-8">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.13/ace.min.js"></script>
-    <title>Hello wasm-pack!</title>
+    <script src="./bootstrap.js"></script>
+    <title>m68k Assembly REPL</title>
   </head>
   <body>
-    <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
-    I'm bad at frontend
+    <h1>Motorola 68000 Assembly REPL</h1>
+    <p>
+      Have you ever wanted to emulate a (currently very small) subset of a Motorola 68000 CPU inside of your browser?
+    </p>
+    <p>
+      Try running a few simple instructions to get a feel for how to manipulate values:
+      <ul>
+        <li><code>move #$FACEBEEF, d1</code></li>
+        <li><code>mulu #2, d1</code></li>
+        <li><code>move d1, ($0)</code></li>
+      </ul>
+    </p>
+    <p>
+      I'm by no means an expert in emulation nor the 68000; if you find something that's not right, please <a href="https://github.com/AnnikaCodes/68k-emulator/issues/new">file an issue</a>.
+    </p>
+    <noscript>This website uses WebAssembly and JavaScript; you must enable JavaScript to properly experience it.</noscript>
     <div id="container"></div>
-    <script src="./bootstrap.js"></script>
+
+    <h2>Supported instructions</h2>
+    <p>
+      The following instructions are supported:
+      <ul>
+        <li><code>move &lt;source&gt;, &lt;destination&gt;</code>: copies the value in <code>&lt;source&gt;</code> to the <code>&lt;destination&gt;</code></li>
+        <li><code>mulu &lt;source&gt;, &lt;destination&gt;</code>: multiplies <code>&lt;source&gt;</code> by <code>&lt;destination&gt;</code>, treating both values as unsigned integers, and stores the result in <code>&lt;destination&gt;</code></li>
+        <li><code>add &lt;source&gt;, &lt;destination&gt;</code>: adds <code>&lt;source&gt;</code> to <code>&lt;destination&gt;</code></li>
+        <li><code>sub &lt;source&gt;, &lt;destination&gt;</code>: subtracts <code>&lt;source&gt;</code> from <code>&lt;destination&gt;</code></li>
+      </ul>
+    </p>
+
+    <h2>How?</h2>
+    <p>
+      The <a href="https://github.com/AnnikaCodes/68k-emulator">code</a> is written in Rust and compiles to WebAssembly to run client-side in the browser.
+    </p>
+    <p>
+      This project is still a work in progress; most instructions are still unsupported, and it's possible that it will never be completed.
+      My goal is to learn about low-level computer architecture and emulation, not produce a fully-featured product.
+    </p>
   </body>
 </html>

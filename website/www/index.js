@@ -46,7 +46,7 @@ function runCode(editor) {
 
     const newOutput = document.createElement("pre");
     newOutput.className = "repl";
-    newOutput.appendChild(document.createTextNode(' => ' + state));
+    newOutput.appendChild(document.createTextNode('=> ' + state));
     document.getElementById("container").appendChild(newOutput);
 
     currentEditor = createEditor();
