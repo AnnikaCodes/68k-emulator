@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -11,7 +11,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -19,11 +18,15 @@ jobs:
     - name: Install Nightly Rust
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: nightly
-          override: true
-          components: rustfmt, clippy
-    - name: Build
+        toolchain: nightly
+        override: true
+    - name: Install wasm-pack
+      uses: jetli/wasm-pack-action@v0.3.0
+    - name: Build (native code)
       run: cargo build
+    - name: Build (WebAssembly)
+      run: wasm-pack build --release --target no-modules
+      working-directory: ./website
     # - name: Lint
     #   uses: actions-rs/clippy-check@v1
     #   with:
@@ -35,3 +38,10 @@ jobs:
       uses: codecov/codecov-action@v2
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+    - name: Publish to GitHub Pages
+      run: |
+        git config --global user.name 'Annika L.'
+        git config --global user.email 'annika0uwu@gmail.com'
+        git add -f website/pkg
+        git commit -m"Deploy to GitHub Pages"
+        git push origin `git subtree split --prefix website main`:gh-pages --force

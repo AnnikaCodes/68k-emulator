@@ -1,21 +1,31 @@
-// implements a REPL based on ace.js
-//
-// Heavily based on https://github.com/kuroko-lang/kuroko-wasm-repl
+/**
+ * Implements an assembly REPL.
+ *
+ * Based on https://github.com/kuroko-lang/kuroko-lang.github.io/blob/master/base.js.
+ */
 
-import {REPLBackend} from "../pkg/website.js";
+var {REPLBackend} = wasm_bindgen;
+/** @type {REPLBackend | null} */
+var backend = null;
+var blockCounter = 0;
+var codeHistory = [];
+var historySpot = 0;
+var scrollToBottom;
+
+async function getBackend() {
+    if (!backend) {
+        await wasm_bindgen('pkg/website_bg.wasm');
+        backend = REPLBackend.new();
+    }
+    return backend;
+}
+
 
 document.getElementById("container").innerText = "";
-let scrollToBottom;
-const codeHistory = [];
-let blockCounter = 0;
-let historySpot = 0;
-let currentEditor = createEditor();
-const backend = REPLBackend.new();
-
 /**
  * Runs the code in an Ace editor.
  */
-function runCode(editor) {
+ function runCode(editor) {
     const value = editor.getValue();
     if (!codeHistory.length || codeHistory[codeHistory.length - 1] !== value) {
         codeHistory.push(value);
@@ -42,33 +52,16 @@ function runCode(editor) {
     editor.destroy();
     document.getElementById("container").appendChild(frozenEditor);
 
-    const state = backend.interpret_assembly(value);
+    getBackend().then(function(backend) {
+        const newOutput = document.createElement("pre");
+        newOutput.className = "repl";
+        newOutput.appendChild(document.createTextNode('=> ' + backend.interpret_assembly(value)));
+        document.getElementById("container").appendChild(newOutput);
 
-    const newOutput = document.createElement("pre");
-    newOutput.className = "repl";
-    newOutput.appendChild(document.createTextNode('=> ' + state));
-    document.getElementById("container").appendChild(newOutput);
-
-    currentEditor = createEditor();
+        currentEditor = createEditor();
+    });
 }
 
-/**
- * Ace command to perform smart enter-key handling.
- *
- * If the text ends in a colon, or if there are multiple lines and the last line
- * of the editor is not blank or all spaces, a line feed will be inserted at the
- * current cursor position. Otherwise, code will be executed and this editor
- * will be marked readonly and a new one will be created after the interpreter
- * returns.
- */
-function enterCallback(editor) {
-    const value = editor.getValue();
-    if ((value.endsWith(":") || value.endsWith("\\")) || (value.split("\n").length > 1 && value.replace(/.*\n */g,"").length > 0)) {
-        editor.insert("\n");
-        return;
-    }
-    runCode(editor);
-}
 
 function historyBackIfOneLine(editor) {
     const value = editor.getValue();
@@ -113,16 +106,10 @@ function createEditor() {
         indentedSoftWrap: false,
         wrap: true
     });
-    //   editor.setTheme("ace/theme/sunsmoke");
-    //   editor.setBehavioursEnabled(false);
-    //   editor.session.setMode("ace/mode/kuroko");
-    editor.commands.bindKey("Return", enterCallback);
+    editor.commands.bindKey("Return", runCode);
     editor.commands.bindKey("Up", historyBackIfOneLine);
     editor.commands.bindKey("Down", historyForwardIfOneLine);
     editor.focus();
-    scrollToBottom = editor.renderer.on('afterRender', function() {
-        newDiv.scrollIntoView();
-    });
     return editor;
 }
 
@@ -139,3 +126,5 @@ function insertCode(code) {
     window.setTimeout(() => runCode(currentEditor), 100);
     return false;
 }
+
+currentEditor = createEditor();
