@@ -28,6 +28,21 @@ pub enum DataRegister {
     D7,
 }
 
+impl From<m68kdecode::DataRegister> for DataRegister {
+    fn from(dr: m68kdecode::DataRegister) -> Self {
+        match dr {
+            m68kdecode::DataRegister::D0 => DataRegister::D0,
+            m68kdecode::DataRegister::D1 => DataRegister::D1,
+            m68kdecode::DataRegister::D2 => DataRegister::D2,
+            m68kdecode::DataRegister::D3 => DataRegister::D3,
+            m68kdecode::DataRegister::D4 => DataRegister::D4,
+            m68kdecode::DataRegister::D5 => DataRegister::D5,
+            m68kdecode::DataRegister::D6 => DataRegister::D6,
+            m68kdecode::DataRegister::D7 => DataRegister::D7,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)] // remove if perf issue
 pub enum AddressRegister {
     A0,
@@ -39,6 +54,21 @@ pub enum AddressRegister {
     A6,
     /// Is the stack pointer
     A7,
+}
+
+impl From<m68kdecode::AddressRegister> for AddressRegister {
+    fn from(reg: m68kdecode::AddressRegister) -> Self {
+        match reg {
+            m68kdecode::AddressRegister::A0 => AddressRegister::A0,
+            m68kdecode::AddressRegister::A1 => AddressRegister::A1,
+            m68kdecode::AddressRegister::A2 => AddressRegister::A2,
+            m68kdecode::AddressRegister::A3 => AddressRegister::A3,
+            m68kdecode::AddressRegister::A4 => AddressRegister::A4,
+            m68kdecode::AddressRegister::A5 => AddressRegister::A5,
+            m68kdecode::AddressRegister::A6 => AddressRegister::A6,
+            m68kdecode::AddressRegister::A7 => AddressRegister::A7,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -168,17 +198,32 @@ impl Display for Registers {
         writeln!(
             f,
             "A0: 0x{} | A1: 0x{} | A2: 0x{} | A3: 0x{} | A4: 0x{} | A5: 0x{} | A6: 0x{} | A7: 0x{}",
-            hex_format_long(self.a0), hex_format_long(self.a1), hex_format_long(self.a2),
-            hex_format_long(self.a3), hex_format_long(self.a4), hex_format_long(self.a5),
-            hex_format_long(self.a6), hex_format_long(self.a7)
+            hex_format_long(self.a0),
+            hex_format_long(self.a1),
+            hex_format_long(self.a2),
+            hex_format_long(self.a3),
+            hex_format_long(self.a4),
+            hex_format_long(self.a5),
+            hex_format_long(self.a6),
+            hex_format_long(self.a7)
         )?;
         writeln!(
             f,
             "D0: 0x{} | D1: 0x{} | D2: 0x{} | D3: 0x{} | D4: 0x{} | D5: 0x{} | D6: 0x{} | D7: 0x{}",
-            hex_format_long(self.d0), hex_format_long(self.d1), hex_format_long(self.d2),
-            hex_format_long(self.d3), hex_format_long(self.d4), hex_format_long(self.d5),
-            hex_format_long(self.d6), hex_format_long(self.d7)
+            hex_format_long(self.d0),
+            hex_format_long(self.d1),
+            hex_format_long(self.d2),
+            hex_format_long(self.d3),
+            hex_format_long(self.d4),
+            hex_format_long(self.d5),
+            hex_format_long(self.d6),
+            hex_format_long(self.d7)
         )?;
-        writeln!(f, "Program Counter: 0x{} | Status: 0x{}", hex_format_long(self.pc), hex_format_word(self.status))
+        writeln!(
+            f,
+            "Program Counter: 0x{} | Status: 0x{}",
+            hex_format_long(self.pc),
+            hex_format_word(self.status)
+        )
     }
 }

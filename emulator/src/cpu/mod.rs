@@ -10,13 +10,19 @@
 
 use std::fmt::Display;
 
-use crate::{ram::Memory, M68kInteger};
+use crate::{
+    cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, parsers::Parser, ram::Memory,
+    M68kInteger, OperandSize,
+};
 pub mod addressing;
 pub mod isa_68000;
 pub mod registers;
 use registers::*;
 
 use self::addressing::AddressMode;
+
+// TODO: is this really supposed to be a `long`?
+static INSTRUCTION_SIZE: OperandSize = OperandSize::Long;
 
 /// Trait for all ISA enums to implement
 pub trait InstructionSet {
@@ -28,19 +34,23 @@ pub enum CPUError {
     MemoryOutOfBoundsAccess(u32),
     WriteToReadOnly(String),
     WrongSizeInteger(M68kInteger),
+    InvalidOperandSize(i32),
 }
 
 pub struct CPU<M: Memory> {
     pub registers: Registers,
     pub memory: M,
+    pub parser: MachineCodeParser,
 }
 
-impl<M> Default for CPU<M> where M: Memory {
+impl<M> Default for CPU<M>
+where
+    M: Memory,
+{
     fn default() -> Self {
         Self::new(1024)
     }
 }
-
 
 impl<M> CPU<M>
 where
@@ -50,7 +60,42 @@ where
         Self {
             registers: Registers::new(),
             memory: M::new(ram_size_in_bytes),
+            parser: MachineCodeParser::default(),
         }
+    }
+
+    /// Runs one cycle of the CPU:
+    ///
+    /// - Fetch the instruction
+    ///
+    /// - Decode the instruction
+    ///
+    /// - Execute the instruction
+    pub fn run_one_cycle(&mut self) -> Result<(), CPUError> {
+        // Fetch
+        let pc = self.registers.get(Register::ProgramCounter);
+        let instruction_binary: u32 = self.memory.read(pc, INSTRUCTION_SIZE)?.into();
+
+        // Decode
+        let decoded_instruction =
+        // TODO: should this be be?
+        // it works for directly copying from a `gcc -Wl,--oformat=binary`...
+            m68kdecode::decode_instruction(&instruction_binary.to_be_bytes()).unwrap();
+        self.registers.set(
+            Register::ProgramCounter,
+            pc + decoded_instruction.bytes_used,
+        );
+        dbg!(
+            &decoded_instruction,
+            self.registers.get(Register::ProgramCounter)
+        );
+        // Execute
+        let parsed_instruction: ISA68000 = decoded_instruction.instruction.into();
+        eprintln!(
+            "Executing instruction {:?} (0x{:X}, taking {} bytes)",
+            parsed_instruction, instruction_binary, decoded_instruction.bytes_used
+        );
+        parsed_instruction.execute(self)
     }
 
     /// Syntactic sugar

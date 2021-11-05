@@ -91,6 +91,7 @@ use crate::{
     cpu::{addressing::AddressMode, CPUError, CPU},
     ram::Memory,
 };
+use m68kdecode::{Instruction, Operation};
 
 use super::InstructionSet;
 
@@ -121,6 +122,21 @@ impl InstructionSet for ISA68000 {
                 let val = src.get_value(cpu)?;
                 dest.set_value(cpu, val)
             }
+        }
+    }
+}
+
+impl From<Instruction> for ISA68000 {
+    fn from(instruction: Instruction) -> Self {
+        let (src, dest) = AddressMode::from_m68kdecode(
+            instruction.size,
+            instruction.operands[0].clone(),
+            instruction.operands[1].clone(),
+        )
+        .unwrap();
+        match instruction.operation {
+            Operation::ADD | Operation::ADDI => ISA68000::Add { src, dest },
+            _ => unimplemented!(),
         }
     }
 }

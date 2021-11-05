@@ -1,0 +1,3 @@
+[submodule "m68kdecode"]
+	path = m68kdecode
+	url = https://github.com/AnnikaCodes/m68kdecode.git

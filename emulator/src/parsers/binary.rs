@@ -1,13 +1,14 @@
 //! Parses binary machine code
 
-use crate::cpu::isa_68000::InstructionFor68000;
+use crate::cpu::isa_68000::ISA68000;
 
-use super::{Parser, ParseError};
+use super::{ParseError, Parser};
 
-pub struct MachineCodeParser {}
+#[derive(Default)]
+pub struct MachineCodeParser;
 
-impl Parser<[u8]> for MachineCodeParser {
-    fn parse(&mut self, source: [u8]) -> Result<InstructionFor68000, ParseError> {
+impl Parser<Vec<u8>> for MachineCodeParser {
+    fn parse(&mut self, _source: Vec<u8>) -> Result<Vec<ISA68000>, ParseError> {
         unimplemented!();
     }
 }

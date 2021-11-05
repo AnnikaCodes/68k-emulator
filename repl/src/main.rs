@@ -1,9 +1,15 @@
 use std::io::Write;
 
-use emulator::{cpu::{CPU, CPUError, InstructionSet, isa_68000::ISA68000}, parsers::{Interpreter, ParseError, assembly::AssemblyInterpreter}, ram::VecBackedMemory};
+use emulator::ram::Memory;
+use emulator::{
+    cpu::{isa_68000::ISA68000, CPUError, InstructionSet, CPU},
+    parsers::{assembly::AssemblyInterpreter, Interpreter, ParseError},
+    ram::VecBackedMemory,
+};
 
-
-fn get_input(interpreter: &mut impl Interpreter<String>) -> Result<impl InstructionSet, ParseError> {
+fn get_input(
+    interpreter: &mut impl Interpreter<String>,
+) -> Result<impl InstructionSet, ParseError> {
     let mut input = String::new();
     print!("> ");
     std::io::stdout().flush().unwrap();
@@ -15,14 +21,11 @@ fn main() {
     println!("Welcome to the Motorola 68000 Assembly REPL!");
     let mut cpu = CPU::<VecBackedMemory>::new(32_768); // 32K
     let mut interpreter = AssemblyInterpreter::new();
+    cpu.memory.write_long(0x00, 0x06400064);
     println!("{}", cpu);
     loop {
-        match get_input(&mut interpreter) {
-            Ok(instruction) => match cpu.run_instruction(instruction) {
-                Ok(_) => println!("{}", cpu),
-                Err(e) => eprintln!("CPU Error: {:?}", e)
-            },
-            Err(e) => eprintln!("Parsing Error: {:?}", e)
-        };
+        println!("Running 1 cycle.");
+        cpu.run_one_cycle().unwrap();
+        println!("{}", cpu);
     }
 }

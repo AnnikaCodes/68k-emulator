@@ -262,6 +262,71 @@ fn set_address_ram_pre_indexed(
 }
 
 impl AddressMode {
+    /// Converts an m68kdecode instruction to a (src, dest) pair of AddressModes
+    ///
+    /// TODO: refactor m68kdecode to use my types natively, or use its types in this pro
+    pub fn from_m68kdecode(
+        size: i32,
+        source: m68kdecode::Operand,
+        destination: m68kdecode::Operand,
+    ) -> Result<(AddressMode, AddressMode), CPUError> {
+        let size = OperandSize::from_size_in_bytes(size)?;
+        Ok((
+            AddressMode::from_m68kdecode_operand(source, size)?,
+            AddressMode::from_m68kdecode_operand(destination, size)?,
+        ))
+    }
+
+    fn from_m68kdecode_operand(
+        op: m68kdecode::Operand,
+        size: OperandSize,
+    ) -> Result<AddressMode, CPUError> {
+        match op {
+            m68kdecode::Operand::IMM8(value) => Ok(AddressMode::Immediate {
+                value: value.into(),
+                size,
+            }),
+            m68kdecode::Operand::IMM16(value) => Ok(AddressMode::Immediate {
+                value: value.into(),
+                size,
+            }),
+            m68kdecode::Operand::IMM32(value) => Ok(AddressMode::Immediate { value, size }),
+
+            m68kdecode::Operand::ABS16(address) => Ok(AddressMode::Absolute {
+                address: address as u32,
+                size,
+            }),
+            m68kdecode::Operand::ABS32(address) => Ok(AddressMode::Absolute { address, size }),
+
+            m68kdecode::Operand::DR(reg) => Ok(AddressMode::RegisterDirect {
+                size,
+                register: Register::Data(reg.into()),
+            }),
+            m68kdecode::Operand::AR(reg) => Ok(AddressMode::RegisterDirect {
+                size,
+                register: Register::Address(reg.into()),
+            }),
+            m68kdecode::Operand::ARIND(reg) => Ok(AddressMode::RegisterIndirect {
+                size,
+                register: reg.into(),
+            }),
+            m68kdecode::Operand::ARINC(reg) => Ok(AddressMode::RegisterIndirectPostIncrement {
+                size,
+                register: reg.into(),
+            }),
+            m68kdecode::Operand::ARDEC(reg) => Ok(AddressMode::RegisterIndirectPreDecrement {
+                size,
+                register: reg.into(),
+            }),
+            m68kdecode::Operand::ARDISP(reg, disp) => {
+                unimplemented!("Parsing displacement {:?}", disp);
+                // AddressMode::RegisterIndirectWithDisplacement, memory/pc indirect modes
+            }
+
+            _ => unimplemented!("converting m68kdecode operand {:?} to AddressMode", op),
+        }
+    }
+
     /// Gets the value referenced by this address
     ///
     /// Should return the same size `M68kInteger` as the `OperandSize` given in the enum

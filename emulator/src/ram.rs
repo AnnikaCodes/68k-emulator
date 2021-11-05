@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{cpu::CPUError, M68kInteger, OperandSize, hex_format_byte};
+use crate::{cpu::CPUError, hex_format_byte, M68kInteger, OperandSize};
 
 // Emulation of Random-Access Memory (RAM)
 

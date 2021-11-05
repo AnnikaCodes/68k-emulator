@@ -1,4 +1,8 @@
-use emulator::{cpu::CPU, parsers::{Interpreter, assembly::AssemblyInterpreter}, ram::{Memory, VecBackedMemory}};
+use emulator::{
+    cpu::CPU,
+    parsers::{assembly::AssemblyInterpreter, Interpreter},
+    ram::{Memory, VecBackedMemory},
+};
 use wasm_bindgen::prelude::*;
 
 #[derive(Default)]
@@ -22,8 +26,8 @@ impl REPLBackend {
                 } else {
                     format!("Ran assembly '{}'\n{}", assembly, self.cpu)
                 }
-            },
-            Err(e) => format!("Parsing error: {:?}\n{}", e, self.cpu)
+            }
+            Err(e) => format!("Parsing error: {:?}\n{}", e, self.cpu),
         }
     }
 }

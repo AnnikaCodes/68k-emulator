@@ -7,6 +7,7 @@ use std::num::{ParseIntError, TryFromIntError};
 
 use crate::cpu::isa_68000::ISA68000;
 pub mod assembly;
+pub mod binary;
 
 #[derive(Debug)]
 pub enum ParseError {

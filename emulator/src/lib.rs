@@ -42,6 +42,15 @@ impl OperandSize {
             OperandSize::Long => 4,
         }
     }
+
+    pub fn from_size_in_bytes(size: i32) -> Result<Self, CPUError> {
+        match size {
+            1 => Ok(OperandSize::Byte),
+            2 => Ok(OperandSize::Word),
+            4 => Ok(OperandSize::Long),
+            _ => Err(CPUError::InvalidOperandSize(size)),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)] // remove if perf issue
