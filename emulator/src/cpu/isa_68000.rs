@@ -99,8 +99,11 @@ use super::InstructionSet;
 pub enum ISA68000 {
     Add { src: AddressMode, dest: AddressMode },
     Subtract { src: AddressMode, dest: AddressMode },
+    ExclusiveOr { src: AddressMode, dest: AddressMode },
     Move { src: AddressMode, dest: AddressMode },
     MultiplyUnsigned { src: AddressMode, dest: AddressMode },
+    RotateLeft { to_rotate: AddressMode, rotate_amount: AddressMode },
+    NoOp,
 }
 
 impl InstructionSet for ISA68000 {
@@ -122,6 +125,15 @@ impl InstructionSet for ISA68000 {
                 let val = src.get_value(cpu)?;
                 dest.set_value(cpu, val)
             }
+            ISA68000::ExclusiveOr { src, dest } => {
+                let val = src.get_value(cpu)? ^ dest.get_value(cpu)?;
+                dest.set_value(cpu, val)
+            }
+            ISA68000::RotateLeft { to_rotate, rotate_amount } => {
+                let val = to_rotate.get_value(cpu)?.rotate_left(rotate_amount.get_value(cpu)?);
+                to_rotate.set_value(cpu, val)
+            }
+            ISA68000::NoOp => Ok(()),
         }
     }
 }
@@ -139,7 +151,17 @@ impl From<Instruction> for ISA68000 {
             Operation::SUB | Operation::SUBI | Operation::SUBA => ISA68000::Subtract { src, dest },
             Operation::MULU => ISA68000::MultiplyUnsigned { src, dest },
             Operation::MOVE => ISA68000::Move { src, dest },
-            _ => unimplemented!("decoding operation {:?} for instruction {:?}", instruction.operation, instruction),
+            Operation::EOR | Operation::EORI => ISA68000::ExclusiveOr { src, dest },
+            // TODO: figure out what ROL means and how it is different from ROXL
+            Operation::ROXL | Operation::ROL => ISA68000::RotateLeft {
+                to_rotate: dest,
+                rotate_amount: src,
+            },
+            Operation::NOP => ISA68000::NoOp,
+            _ => {
+                eprintln!("Unknown operation {:?} for instruction {:?}", instruction.operation, instruction);
+                ISA68000::NoOp
+            },
         }
     }
 }
