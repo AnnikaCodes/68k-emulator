@@ -8,6 +8,7 @@
 //!
 //! However, we don't support non-68000s yet, so it's not terribly relevant.
 
+use core::slice::SlicePattern;
 use std::fmt::Display;
 
 use crate::{
@@ -74,26 +75,21 @@ where
     pub fn run_one_cycle(&mut self) -> Result<(), CPUError> {
         // Fetch
         let pc = self.registers.get(Register::ProgramCounter);
-        let instruction_binary: u32 = self.memory.read(pc, INSTRUCTION_SIZE)?.into();
-
+        let binary = self.memory.read_bytes(pc, 8)?;
         // Decode
         let decoded_instruction =
         // TODO: should this be be?
         // it works for directly copying from a `gcc -Wl,--oformat=binary`...
-            m68kdecode::decode_instruction(&instruction_binary.to_be_bytes()).unwrap();
+            m68kdecode::decode_instruction(binary.as_slice()).unwrap();
         self.registers.set(
             Register::ProgramCounter,
             pc + decoded_instruction.bytes_used,
         );
-        dbg!(
-            &decoded_instruction,
-            self.registers.get(Register::ProgramCounter)
-        );
         // Execute
         let parsed_instruction: ISA68000 = decoded_instruction.instruction.into();
         eprintln!(
-            "Executing instruction {:?} (0x{:X}, taking {} bytes)",
-            parsed_instruction, instruction_binary, decoded_instruction.bytes_used
+            "Executing instruction {:?} ({:?}, taking {} bytes)",
+            parsed_instruction, binary, decoded_instruction.bytes_used
         );
         parsed_instruction.execute(self)
     }
@@ -113,6 +109,6 @@ where
     M: Memory,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}{}", self.registers, self.memory)
+        write!(f, "{}", self.registers)
     }
 }

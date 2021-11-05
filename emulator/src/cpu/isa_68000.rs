@@ -135,8 +135,11 @@ impl From<Instruction> for ISA68000 {
         )
         .unwrap();
         match instruction.operation {
-            Operation::ADD | Operation::ADDI => ISA68000::Add { src, dest },
-            _ => unimplemented!(),
+            Operation::ADD | Operation::ADDI | Operation::ADDA => ISA68000::Add { src, dest },
+            Operation::SUB | Operation::SUBI | Operation::SUBA => ISA68000::Subtract { src, dest },
+            Operation::MULU => ISA68000::MultiplyUnsigned { src, dest },
+            Operation::MOVE => ISA68000::Move { src, dest },
+            _ => unimplemented!("decoding operation {:?} for instruction {:?}", instruction.operation, instruction),
         }
     }
 }

@@ -1,6 +1,6 @@
 [workspace]
 members = [
     "emulator",
-    "repl",
+    "run68",
     "website"
 ]

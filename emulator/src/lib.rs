@@ -1,3 +1,4 @@
+#![feature(slice_pattern)]
 //! Motorola 68k CPU emulation library.
 
 use std::ops::{Add, Sub};
