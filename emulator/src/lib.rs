@@ -1,7 +1,7 @@
 #![feature(slice_pattern)]
 //! Motorola 68k CPU emulation library.
 
-use std::ops::{Add, BitXor, Sub};
+use std::ops::{Add, Sub};
 
 use cpu::CPUError;
 pub mod cpu;

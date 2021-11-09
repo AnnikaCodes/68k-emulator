@@ -3,7 +3,7 @@
 //! Refer to http://www.scarpaz.com/Attic/Didattica/Scarpazza-2005-68k-1-addressing.pdf
 //! and http://faculty.cs.niu.edu/~winans/CS463/notes/amodes.pdf for reference on how these work.
 
-use m68kdecode::{Displacement, Indexer, MemoryIndirection};
+use m68kdecode::{Indexer, MemoryIndirection};
 
 use crate::ram::Memory;
 use crate::{M68kInteger, OperandSize};
@@ -365,7 +365,7 @@ impl AddressMode {
                     },
                 }
             }
-            m68kdecode::Operand::PCDISP(idk_what_this_is, disp) => {
+            m68kdecode::Operand::PCDISP(_idk_what_this_is, disp) => {
                 // This is gross! TODO: refactor either us or m68kdecode to be better
                 match disp.indexer {
                     Indexer::AR(index_reg, offset) => {
@@ -416,7 +416,7 @@ impl AddressMode {
         address_register: Register,
         index_register: Register,
         size: OperandSize,
-        offset: u8,
+        _offset: u8,
         base_displacement: u16,
         outer_displacement: u16,
     ) -> Self {
@@ -436,7 +436,7 @@ impl AddressMode {
             MemoryIndirection::IndirectPostIndexed => match address_register {
                 Register::Address(ar) => AddressMode::MemoryPostIndexed {
                     size,
-                    address_register: ar.into(),
+                    address_register: ar,
                     index_register,
                     index_scale: size.into(),
                     base_displacement,
@@ -454,7 +454,7 @@ impl AddressMode {
             MemoryIndirection::IndirectPreIndexed =>  match address_register {
                 Register::Address(ar) => AddressMode::MemoryPreIndexed {
                     size,
-                    address_register: ar.into(),
+                    address_register: ar,
                     index_register,
                     index_scale: size.into(),
                     base_displacement,
@@ -472,7 +472,7 @@ impl AddressMode {
             MemoryIndirection::NoIndirection => match address_register {
                 Register::Address(ar) => AddressMode::RegisterIndirectWithDisplacement {
                     size,
-                    register: ar.into(),
+                    register: ar,
                     displacement: base_displacement,
                 },
                 Register::ProgramCounter => AddressMode::ProgramCounterIndirectWithDisplacement {

@@ -8,12 +8,11 @@
 //!
 //! However, we don't support non-68000s yet, so it's not terribly relevant.
 
-use core::slice::SlicePattern;
 use std::fmt::Display;
 
 use crate::{
-    cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, parsers::Parser, ram::Memory,
-    M68kInteger, OperandSize,
+    cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, ram::Memory,
+    M68kInteger,
 };
 pub mod addressing;
 pub mod isa_68000;
@@ -21,9 +20,6 @@ pub mod registers;
 use registers::*;
 
 use self::addressing::AddressMode;
-
-// TODO: is this really supposed to be a `long`?
-static INSTRUCTION_SIZE: OperandSize = OperandSize::Long;
 
 /// Trait for all ISA enums to implement
 pub trait InstructionSet {

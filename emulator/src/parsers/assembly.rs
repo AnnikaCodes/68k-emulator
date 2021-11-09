@@ -1,6 +1,5 @@
 //! Parses assembly code
 
-use std::fs::OpenOptions;
 
 use super::{Interpreter, ParseError};
 use crate::cpu::{
@@ -13,7 +12,7 @@ use crate::OperandSize;
 fn to_u16(int: u32) -> Result<u16, ParseError> {
     match int.try_into() {
         Ok(d) => Ok(d),
-        Err(error) => return Err(ParseError::NumberTooLarge(error)),
+        Err(error) => Err(ParseError::NumberTooLarge(error)),
     }
 }
 
@@ -165,8 +164,9 @@ impl AssemblyInterpreter {
                     3 | 4 if parts[0].starts_with('[') => {
                         let mut for_ia: Vec<&str> = vec![];
 
-                        while let part = parts.remove(0) {
-                            if let Some(part) = part.strip_suffix("]") {
+                        loop {
+                            let part = parts.remove(0);
+                            if let Some(part) = part.strip_suffix(']') {
                                 for_ia.push(part);
                                 break;
                             }
@@ -398,7 +398,10 @@ impl Interpreter<String> for AssemblyInterpreter {
             "sub" => Ok(ISA68000::Subtract { src, dest }),
             "mulu" => Ok(ISA68000::MultiplyUnsigned { src, dest }),
             "move" => Ok(ISA68000::Move { src, dest }),
-            "roxl" => Ok(ISA68000::RotateLeft { to_rotate: src, rotate_amount: dest }),
+            "roxl" => Ok(ISA68000::RotateLeft {
+                to_rotate: src,
+                rotate_amount: dest,
+            }),
             "eor" => Ok(ISA68000::ExclusiveOr { src, dest }),
             "or" => Ok(ISA68000::InclusiveOr { src, dest }),
             "nop" => Ok(ISA68000::NoOp),
