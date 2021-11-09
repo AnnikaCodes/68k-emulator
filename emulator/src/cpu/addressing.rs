@@ -3,6 +3,8 @@
 //! Refer to http://www.scarpaz.com/Attic/Didattica/Scarpazza-2005-68k-1-addressing.pdf
 //! and http://faculty.cs.niu.edu/~winans/CS463/notes/amodes.pdf for reference on how these work.
 
+use m68kdecode::{Displacement, Indexer, MemoryIndirection};
+
 use crate::ram::Memory;
 use crate::{M68kInteger, OperandSize};
 
@@ -269,61 +271,216 @@ impl AddressMode {
         size: i32,
         source: m68kdecode::Operand,
         destination: m68kdecode::Operand,
-    ) -> Result<(AddressMode, AddressMode), CPUError> {
-        let size = OperandSize::from_size_in_bytes(size)?;
+    ) -> Result<(AddressMode, Option<AddressMode>), CPUError> {
+        let size = if size == 0 {
+            // Hack to handle 0-size for non-moving instructions like JMP coming from m68kdecode
+            OperandSize::Long
+        } else {
+            OperandSize::from_size_in_bytes(size)?
+        };
+
         Ok((
-            AddressMode::from_m68kdecode_operand(source, size)?,
-            AddressMode::from_m68kdecode_operand(destination, size)?,
+            // Should be OK to unwrap since we won't have 2 NoOperands
+            AddressMode::from_m68kdecode_operand(source, size).unwrap(),
+            AddressMode::from_m68kdecode_operand(destination, size),
         ))
     }
 
-    fn from_m68kdecode_operand(
-        op: m68kdecode::Operand,
-        size: OperandSize,
-    ) -> Result<AddressMode, CPUError> {
+    fn from_m68kdecode_operand(op: m68kdecode::Operand, size: OperandSize) -> Option<AddressMode> {
         match op {
-            m68kdecode::Operand::IMM8(value) => Ok(AddressMode::Immediate {
+            m68kdecode::Operand::IMM8(value) => Some(AddressMode::Immediate {
                 value: value.into(),
                 size,
             }),
-            m68kdecode::Operand::IMM16(value) => Ok(AddressMode::Immediate {
+            m68kdecode::Operand::IMM16(value) => Some(AddressMode::Immediate {
                 value: value.into(),
                 size,
             }),
-            m68kdecode::Operand::IMM32(value) => Ok(AddressMode::Immediate { value, size }),
+            m68kdecode::Operand::IMM32(value) => Some(AddressMode::Immediate { value, size }),
 
-            m68kdecode::Operand::ABS16(address) => Ok(AddressMode::Absolute {
+            m68kdecode::Operand::ABS16(address) => Some(AddressMode::Absolute {
                 address: address as u32,
                 size,
             }),
-            m68kdecode::Operand::ABS32(address) => Ok(AddressMode::Absolute { address, size }),
+            m68kdecode::Operand::ABS32(address) => Some(AddressMode::Absolute { address, size }),
 
-            m68kdecode::Operand::DR(reg) => Ok(AddressMode::RegisterDirect {
+            m68kdecode::Operand::DR(reg) => Some(AddressMode::RegisterDirect {
                 size,
                 register: Register::Data(reg.into()),
             }),
-            m68kdecode::Operand::AR(reg) => Ok(AddressMode::RegisterDirect {
+            m68kdecode::Operand::AR(reg) => Some(AddressMode::RegisterDirect {
                 size,
                 register: Register::Address(reg.into()),
             }),
-            m68kdecode::Operand::ARIND(reg) => Ok(AddressMode::RegisterIndirect {
+            m68kdecode::Operand::ARIND(reg) => Some(AddressMode::RegisterIndirect {
                 size,
                 register: reg.into(),
             }),
-            m68kdecode::Operand::ARINC(reg) => Ok(AddressMode::RegisterIndirectPostIncrement {
+            m68kdecode::Operand::ARINC(reg) => Some(AddressMode::RegisterIndirectPostIncrement {
                 size,
                 register: reg.into(),
             }),
-            m68kdecode::Operand::ARDEC(reg) => Ok(AddressMode::RegisterIndirectPreDecrement {
+            m68kdecode::Operand::ARDEC(reg) => Some(AddressMode::RegisterIndirectPreDecrement {
                 size,
                 register: reg.into(),
             }),
             m68kdecode::Operand::ARDISP(reg, disp) => {
-                unimplemented!("Parsing displacement {:?}", disp);
-                // AddressMode::RegisterIndirectWithDisplacement, memory/pc indirect modes
+                // This is gross! TODO: refactor either us or m68kdecode to be better
+                match disp.indexer {
+                    Indexer::AR(index_reg, offset) => {
+                        Some(Self::from_m68kdecode_with_register_indexing(
+                            disp.indirection,
+                            Register::Address(reg.into()),
+                            Register::Address(index_reg.into()),
+                            size,
+                            offset,
+                            disp.base_displacement as u16,
+                            disp.outer_displacement as u16,
+                        ))
+                    }
+                    Indexer::DR(index_reg, offset) => {
+                        Some(Self::from_m68kdecode_with_register_indexing(
+                            disp.indirection,
+                            Register::Address(reg.into()),
+                            Register::Data(index_reg.into()),
+                            size,
+                            offset,
+                            disp.base_displacement as u16,
+                            disp.outer_displacement as u16,
+                        ))
+                    }
+                    Indexer::NoIndexer => match disp.indirection {
+                        MemoryIndirection::Indirect
+                        | MemoryIndirection::IndirectPostIndexed
+                        | MemoryIndirection::IndirectPreIndexed => {
+                            panic!("Should not have memory indirect addressing without indexing")
+                        }
+                        MemoryIndirection::NoIndirection => {
+                            Some(AddressMode::RegisterIndirectWithDisplacement {
+                                size,
+                                register: reg.into(),
+                                displacement: disp.base_displacement as u16,
+                            })
+                        }
+                    },
+                }
             }
+            m68kdecode::Operand::PCDISP(idk_what_this_is, disp) => {
+                // This is gross! TODO: refactor either us or m68kdecode to be better
+                match disp.indexer {
+                    Indexer::AR(index_reg, offset) => {
+                        Some(Self::from_m68kdecode_with_register_indexing(
+                            disp.indirection,
+                            Register::ProgramCounter,
+                            Register::Address(index_reg.into()),
+                            size,
+                            offset,
+                            disp.base_displacement as u16,
+                            disp.outer_displacement as u16,
+                        ))
+                    }
+                    Indexer::DR(index_reg, offset) => {
+                        Some(Self::from_m68kdecode_with_register_indexing(
+                            disp.indirection,
+                            Register::ProgramCounter,
+                            Register::Data(index_reg.into()),
+                            size,
+                            offset,
+                            disp.base_displacement as u16,
+                            disp.outer_displacement as u16,
+                        ))
+                    }
+                    Indexer::NoIndexer => match disp.indirection {
+                        MemoryIndirection::Indirect
+                        | MemoryIndirection::IndirectPostIndexed
+                        | MemoryIndirection::IndirectPreIndexed => {
+                            panic!("Should not have memory indirect addressing without indexing")
+                        }
+                        MemoryIndirection::NoIndirection => {
+                            Some(AddressMode::ProgramCounterIndirectWithDisplacement {
+                                size,
+                                displacement: disp.base_displacement as u16,
+                            })
+                        }
+                    },
+                }
+            }
+            m68kdecode::Operand::NoOperand => None,
 
             _ => unimplemented!("converting m68kdecode operand {:?} to AddressMode", op),
+        }
+    }
+
+    fn from_m68kdecode_with_register_indexing(
+        indirection: MemoryIndirection,
+        address_register: Register,
+        index_register: Register,
+        size: OperandSize,
+        offset: u8,
+        base_displacement: u16,
+        outer_displacement: u16,
+    ) -> Self {
+        match indirection {
+            MemoryIndirection::Indirect => {
+                match address_register {
+                    Register::ProgramCounter => AddressMode::ProgramCounterIndirectIndexed {
+                        size,
+                        displacement: base_displacement,
+                        index_register,
+                        index_scale: size.into(),
+                    },
+                    _ => panic!("Shouldn't have memory indirect indexing without pre/postindexing specified except for PC")
+                }
+            }
+            // TODO: handle offset
+            MemoryIndirection::IndirectPostIndexed => match address_register {
+                Register::Address(ar) => AddressMode::MemoryPostIndexed {
+                    size,
+                    address_register: ar.into(),
+                    index_register,
+                    index_scale: size.into(),
+                    base_displacement,
+                    outer_displacement,
+                },
+                Register::ProgramCounter => AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+                    size,
+                    index_register,
+                    index_scale: size.into(),
+                    base_displacement,
+                    outer_displacement,
+                },
+                Register::Data(_) => unimplemented!("data register with postindexed addressing"),
+            }
+            MemoryIndirection::IndirectPreIndexed =>  match address_register {
+                Register::Address(ar) => AddressMode::MemoryPreIndexed {
+                    size,
+                    address_register: ar.into(),
+                    index_register,
+                    index_scale: size.into(),
+                    base_displacement,
+                    outer_displacement,
+                },
+                Register::ProgramCounter => AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+                    size,
+                    index_register,
+                    index_scale: size.into(),
+                    base_displacement,
+                    outer_displacement,
+                },
+                Register::Data(_) => unimplemented!("data register with preindexed addressing"),
+            }
+            MemoryIndirection::NoIndirection => match address_register {
+                Register::Address(ar) => AddressMode::RegisterIndirectWithDisplacement {
+                    size,
+                    register: ar.into(),
+                    displacement: base_displacement,
+                },
+                Register::ProgramCounter => AddressMode::ProgramCounterIndirectWithDisplacement {
+                    size,
+                    displacement: base_displacement,
+                },
+                Register::Data(_) => unimplemented!("data register where address/PC expected"),
+            }
         }
     }
 

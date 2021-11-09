@@ -97,12 +97,38 @@ use super::InstructionSet;
 
 #[derive(Debug, PartialEq)]
 pub enum ISA68000 {
-    Add { src: AddressMode, dest: AddressMode },
-    Subtract { src: AddressMode, dest: AddressMode },
-    ExclusiveOr { src: AddressMode, dest: AddressMode },
-    Move { src: AddressMode, dest: AddressMode },
-    MultiplyUnsigned { src: AddressMode, dest: AddressMode },
-    RotateLeft { to_rotate: AddressMode, rotate_amount: AddressMode },
+    Add {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    Subtract {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    ExclusiveOr {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    InclusiveOr {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    And {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    Move {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    MultiplyUnsigned {
+        src: AddressMode,
+        dest: AddressMode,
+    },
+    RotateLeft {
+        to_rotate: AddressMode,
+        rotate_amount: AddressMode,
+    },
     NoOp,
 }
 
@@ -126,11 +152,24 @@ impl InstructionSet for ISA68000 {
                 dest.set_value(cpu, val)
             }
             ISA68000::ExclusiveOr { src, dest } => {
-                let val = src.get_value(cpu)? ^ dest.get_value(cpu)?;
+                let val = src.get_value(cpu)?.xor(dest.get_value(cpu)?);
                 dest.set_value(cpu, val)
             }
-            ISA68000::RotateLeft { to_rotate, rotate_amount } => {
-                let val = to_rotate.get_value(cpu)?.rotate_left(rotate_amount.get_value(cpu)?);
+            ISA68000::InclusiveOr { src, dest } => {
+                let val = src.get_value(cpu)?.or(dest.get_value(cpu)?);
+                dest.set_value(cpu, val)
+            }
+            ISA68000::And { src, dest } => {
+                let val = src.get_value(cpu)?.and(dest.get_value(cpu)?);
+                dest.set_value(cpu, val)
+            }
+            ISA68000::RotateLeft {
+                to_rotate,
+                rotate_amount,
+            } => {
+                let val = to_rotate
+                    .get_value(cpu)?
+                    .rotate_left(rotate_amount.get_value(cpu)?);
                 to_rotate.set_value(cpu, val)
             }
             ISA68000::NoOp => Ok(()),
@@ -147,21 +186,47 @@ impl From<Instruction> for ISA68000 {
         )
         .unwrap();
         match instruction.operation {
-            Operation::ADD | Operation::ADDI | Operation::ADDA => ISA68000::Add { src, dest },
-            Operation::SUB | Operation::SUBI | Operation::SUBA => ISA68000::Subtract { src, dest },
-            Operation::MULU => ISA68000::MultiplyUnsigned { src, dest },
-            Operation::MOVE => ISA68000::Move { src, dest },
-            Operation::EOR | Operation::EORI => ISA68000::ExclusiveOr { src, dest },
+            Operation::ADD | Operation::ADDI | Operation::ADDA => ISA68000::Add {
+                src,
+                dest: dest.unwrap(),
+            },
+            Operation::SUB | Operation::SUBI | Operation::SUBA => ISA68000::Subtract {
+                src,
+                dest: dest.unwrap(),
+            },
+            Operation::MULU => ISA68000::MultiplyUnsigned {
+                src,
+                dest: dest.unwrap(),
+            },
+            Operation::MOVE => ISA68000::Move {
+                src,
+                dest: dest.unwrap(),
+            },
+            Operation::EOR | Operation::EORI => ISA68000::ExclusiveOr {
+                src,
+                dest: dest.unwrap(),
+            },
+            Operation::OR | Operation::ORI => ISA68000::InclusiveOr {
+                src,
+                dest: dest.unwrap(),
+            },
+            Operation::AND | Operation::ANDI => ISA68000::And {
+                src,
+                dest: dest.unwrap(),
+            },
             // TODO: figure out what ROL means and how it is different from ROXL
             Operation::ROXL | Operation::ROL => ISA68000::RotateLeft {
-                to_rotate: dest,
+                to_rotate: dest.unwrap(),
                 rotate_amount: src,
             },
             Operation::NOP => ISA68000::NoOp,
             _ => {
-                eprintln!("Unknown operation {:?} for instruction {:?}", instruction.operation, instruction);
+                eprintln!(
+                    "UNKNOWN OPCODE: {:?} for instruction {:?}",
+                    instruction.operation, instruction
+                );
                 ISA68000::NoOp
-            },
+            }
         }
     }
 }

@@ -80,17 +80,14 @@ where
         let decoded_instruction =
         // TODO: should this be be?
         // it works for directly copying from a `gcc -Wl,--oformat=binary`...
-            m68kdecode::decode_instruction(binary.as_slice()).unwrap();
+        m68kdecode::decode_instruction(binary.as_slice()).unwrap();
         self.registers.set(
             Register::ProgramCounter,
             pc + decoded_instruction.bytes_used,
         );
         // Execute
         let parsed_instruction: ISA68000 = decoded_instruction.instruction.into();
-        eprintln!(
-            "Executing instruction {:?} ({:?}, taking {} bytes)",
-            parsed_instruction, binary, decoded_instruction.bytes_used
-        );
+        eprintln!("EXECUTE: {:?}", parsed_instruction,);
         parsed_instruction.execute(self)
     }
 
