@@ -391,24 +391,17 @@ impl Interpreter<String> for AssemblyInterpreter {
             Some(s) => s,
             None => return Err(ParseError::NoInstruction(source)),
         };
+        let (src, dest) = Self::parse_source_dest(rest, source)?;
 
         match instruction_token {
-            "add" => {
-                let (src, dest) = Self::parse_source_dest(rest, source)?;
-                Ok(ISA68000::Add { src, dest })
-            }
-            "sub" => {
-                let (src, dest) = Self::parse_source_dest(rest, source)?;
-                Ok(ISA68000::Subtract { src, dest })
-            }
-            "move" => {
-                let (src, dest) = Self::parse_source_dest(rest, source)?;
-                Ok(ISA68000::Move { src, dest })
-            }
-            "mulu" => {
-                let (src, dest) = Self::parse_source_dest(rest, source)?;
-                Ok(ISA68000::MultiplyUnsigned { src, dest })
-            }
+            "add" => Ok(ISA68000::Add { src, dest }),
+            "sub" => Ok(ISA68000::Subtract { src, dest }),
+            "mulu" => Ok(ISA68000::MultiplyUnsigned { src, dest }),
+            "move" => Ok(ISA68000::Move { src, dest }),
+            "roxl" => Ok(ISA68000::RotateLeft { to_rotate: src, rotate_amount: dest }),
+            "eor" => Ok(ISA68000::ExclusiveOr { src, dest }),
+            "or" => Ok(ISA68000::InclusiveOr { src, dest }),
+            "nop" => Ok(ISA68000::NoOp),
             _ => Err(ParseError::UnknownInstruction(
                 instruction_token.to_string(),
             )),
