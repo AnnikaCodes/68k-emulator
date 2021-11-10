@@ -88,9 +88,10 @@
 //! UNLK (Unlink)
 
 use crate::{
-    cpu::{addressing::AddressMode, CPUError, CPU},
+    cpu::{addressing::AddressMode, CPUError, CPU, registers::Register},
     ram::Memory,
 };
+use colored::*;
 use m68kdecode::{Instruction, Operation};
 
 use super::InstructionSet;
@@ -129,6 +130,7 @@ pub enum ISA68000 {
         to_rotate: AddressMode,
         rotate_amount: AddressMode,
     },
+    JumpTo { address: AddressMode },
     NoOp,
 }
 
@@ -171,6 +173,11 @@ impl InstructionSet for ISA68000 {
                     .get_value(cpu)?
                     .rotate_left(rotate_amount.get_value(cpu)?);
                 to_rotate.set_value(cpu, val)
+            }
+            ISA68000::JumpTo { address } => {
+                let val = address.get_value(cpu)?;
+                cpu.registers.set(Register::ProgramCounter, val);
+                Ok(())
             }
             ISA68000::NoOp => Ok(()),
         }
@@ -219,11 +226,12 @@ impl From<Instruction> for ISA68000 {
                 to_rotate: dest.unwrap(),
                 rotate_amount: src,
             },
+            Operation::JMP => ISA68000::JumpTo { address: src },
             Operation::NOP => ISA68000::NoOp,
             _ => {
                 eprintln!(
-                    "UNKNOWN OPCODE: {:?} for instruction {:?}",
-                    instruction.operation, instruction
+                    "{}: {} for instruction {:?}",
+                    "Unknown operation".red().bold(), format!("{:?}", instruction.operation).cyan().bold(), instruction
                 );
                 ISA68000::NoOp
             }

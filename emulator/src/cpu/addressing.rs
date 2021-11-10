@@ -365,7 +365,7 @@ impl AddressMode {
                     },
                 }
             }
-            m68kdecode::Operand::PCDISP(_idk_what_this_is, disp) => {
+            m68kdecode::Operand::PCDISP(size, disp) => {
                 // This is gross! TODO: refactor either us or m68kdecode to be better
                 match disp.indexer {
                     Indexer::AR(index_reg, offset) => {
@@ -373,7 +373,7 @@ impl AddressMode {
                             disp.indirection,
                             Register::ProgramCounter,
                             Register::Address(index_reg.into()),
-                            size,
+                            OperandSize::from_size_in_bytes(size as i32).unwrap(),
                             offset,
                             disp.base_displacement as u16,
                             disp.outer_displacement as u16,
@@ -384,7 +384,7 @@ impl AddressMode {
                             disp.indirection,
                             Register::ProgramCounter,
                             Register::Data(index_reg.into()),
-                            size,
+                            OperandSize::from_size_in_bytes(size as i32).unwrap(),
                             offset,
                             disp.base_displacement as u16,
                             disp.outer_displacement as u16,
@@ -398,7 +398,7 @@ impl AddressMode {
                         }
                         MemoryIndirection::NoIndirection => {
                             Some(AddressMode::ProgramCounterIndirectWithDisplacement {
-                                size,
+                                size: OperandSize::from_size_in_bytes(size as i32).unwrap(),
                                 displacement: disp.base_displacement as u16,
                             })
                         }

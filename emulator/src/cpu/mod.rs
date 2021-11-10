@@ -9,6 +9,7 @@
 //! However, we don't support non-68000s yet, so it's not terribly relevant.
 
 use std::fmt::Display;
+use colored::*;
 
 use crate::{
     cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, ram::Memory,
@@ -83,7 +84,7 @@ where
         );
         // Execute
         let parsed_instruction: ISA68000 = decoded_instruction.instruction.into();
-        eprintln!("EXECUTE: {:?}", parsed_instruction,);
+        println!("{}: {:?}", "Execute".green().bold(),  parsed_instruction);
         parsed_instruction.execute(self)
     }
 
