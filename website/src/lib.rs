@@ -1,6 +1,6 @@
 use emulator::{
     cpu::{InstructionSet, CPU},
-    parsers::{assembly::AssemblyInterpreter, Interpreter},
+    parsers::{assembly::AssemblyInterpreter, Parser},
     ram::{VecBackedMemory},
 };
 use wasm_bindgen::prelude::*;
@@ -19,7 +19,7 @@ impl REPLBackend {
     }
 
     pub fn interpret_assembly(&mut self, assembly: String) -> String {
-        match self.interpreter.parse_instruction(assembly.clone()) {
+        match self.interpreter.parse(assembly.clone()) {
             Ok((instruction, size)) => {
                 if let Err(e) = instruction.execute(&mut self.cpu, size) {
                     format!("Error: {:?}\n{}", e, self.cpu)

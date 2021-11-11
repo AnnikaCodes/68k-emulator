@@ -6,10 +6,9 @@
 use m68kdecode::{Indexer, MemoryIndirection};
 
 use crate::ram::Memory;
-use crate::{M68kInteger, OperandSize};
+use crate::{EmulationError, M68kInteger, OperandSize};
 
-use super::registers::*;
-use super::{CPUError, CPU};
+use super::{registers::*, CPU};
 
 /// Index register scaling - the ONLY legal values for this are 1, 2, and 4.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -120,7 +119,7 @@ fn get_address_register_indirect_with_displacement(
     register: Register,
     displacement: u32,
     size: OperandSize,
-) -> Result<M68kInteger, CPUError> {
+) -> Result<M68kInteger, EmulationError> {
     cpu.memory
         .read(cpu.registers.get(register) + displacement, size)
 }
@@ -131,7 +130,7 @@ fn set_address_register_indirect_with_displacement(
     register: Register,
     displacement: u32,
     value: M68kInteger,
-) -> Result<(), CPUError> {
+) -> Result<(), EmulationError> {
     cpu.memory
         .write(cpu.registers.get(register) + displacement, value)
 }
@@ -144,7 +143,7 @@ fn get_address_register_indirect_indexed(
     index_scale: u32,
     displacement: u32,
     size: OperandSize,
-) -> Result<M68kInteger, CPUError> {
+) -> Result<M68kInteger, EmulationError> {
     let base_address = cpu.registers.get(address_register);
     let index_value = cpu.registers.get(index_register) * index_scale;
     let operand_address = base_address + displacement + index_value;
@@ -160,7 +159,7 @@ fn set_address_register_indirect_indexed(
     index_scale: u32,
     displacement: u32,
     value: M68kInteger,
-) -> Result<(), CPUError> {
+) -> Result<(), EmulationError> {
     let base_address = cpu.registers.get(address_register);
     let index_value = cpu.registers.get(index_register) * index_scale;
     let operand_address = base_address + displacement + index_value;
@@ -177,7 +176,7 @@ fn get_address_ram_post_indexed(
     base_displacement: u32,
     outer_displacement: u32,
     size: OperandSize,
-) -> Result<M68kInteger, CPUError> {
+) -> Result<M68kInteger, EmulationError> {
     let index_value = cpu.registers.get(index_register) * index_scale;
     let intermediate_address = base_address + base_displacement;
     let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
@@ -195,7 +194,7 @@ fn set_address_ram_post_indexed(
     base_displacement: u32,
     outer_displacement: u32,
     value: M68kInteger,
-) -> Result<(), CPUError> {
+) -> Result<(), EmulationError> {
     let index_value = cpu.registers.get(index_register) * index_scale;
     let intermediate_address = base_address + base_displacement;
     let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
@@ -215,7 +214,7 @@ fn get_address_ram_pre_indexed(
     base_displacement: u32,
     outer_displacement: u32,
     size: OperandSize,
-) -> Result<M68kInteger, CPUError> {
+) -> Result<M68kInteger, EmulationError> {
     let index_value = cpu.registers.get(index_register) * index_scale;
     let intermediate_address = base_address + base_displacement + index_value;
     let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
@@ -233,7 +232,7 @@ fn set_address_ram_pre_indexed(
     base_displacement: u32,
     outer_displacement: u32,
     value: M68kInteger,
-) -> Result<(), CPUError> {
+) -> Result<(), EmulationError> {
     let index_value = cpu.registers.get(index_register) * index_scale;
     let intermediate_address = base_address + base_displacement + index_value;
     let intermediate_address_value = cpu.memory.read_long(intermediate_address)?;
@@ -249,7 +248,7 @@ impl AddressMode {
     pub fn from_m68kdecode(
         source: m68kdecode::Operand,
         destination: m68kdecode::Operand,
-    ) -> Result<(AddressMode, Option<AddressMode>), CPUError> {
+    ) -> Result<(AddressMode, Option<AddressMode>), EmulationError> {
         Ok((
             // Should be OK to unwrap since we won't have 2 NoOperands
             AddressMode::from_m68kdecode_operand(source).unwrap(),
@@ -436,7 +435,7 @@ impl AddressMode {
         &self,
         cpu: &mut CPU<impl crate::ram::Memory>,
         size: OperandSize,
-    ) -> Result<M68kInteger, CPUError> {
+    ) -> Result<M68kInteger, EmulationError> {
         match *self {
             // Absolute
             AddressMode::Absolute { address } => cpu.memory.read(address, size),
@@ -583,13 +582,13 @@ impl AddressMode {
         &self,
         cpu: &mut CPU<impl Memory>,
         new_value: M68kInteger,
-    ) -> Result<(), CPUError> {
+    ) -> Result<(), EmulationError> {
         match *self {
             // Absolute
             AddressMode::Absolute { address } => cpu.memory.write(address, new_value),
 
             // Immediate
-            AddressMode::Immediate { .. } => Err(CPUError::WriteToReadOnly(
+            AddressMode::Immediate { .. } => Err(EmulationError::WriteToReadOnly(
                 "can't write to constant value".to_string(),
             )),
 
@@ -742,7 +741,7 @@ mod tests {
             OperandSize,
             M68kInteger,
             M68kInteger,
-        ) -> Result<(), CPUError>,
+        ) -> Result<(), EmulationError>,
     ) {
         let cpu1 = CPU::<VecBackedMemory>::new(1_024);
         let cpu2 = CPU::<VecBackedMemory>::new(1_024);

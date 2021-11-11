@@ -1,15 +1,15 @@
 use std::fmt::Display;
 
-use crate::{cpu::CPUError, hex_format_byte, M68kInteger, OperandSize};
+use crate::{hex_format_byte, EmulationError, M68kInteger, OperandSize};
 
 // Emulation of Random-Access Memory (RAM)
 
 pub trait Memory: Display {
     fn new(size_in_bytes: usize) -> Self;
-    fn read_byte(&self, address: u32) -> Result<u8, CPUError>;
-    fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError>;
+    fn read_byte(&self, address: u32) -> Result<u8, EmulationError>;
+    fn write_byte(&mut self, address: u32, value: u8) -> Result<(), EmulationError>;
 
-    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError> {
+    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, EmulationError> {
         match size {
             OperandSize::Byte => Ok(M68kInteger::Byte(self.read_byte(address)?)),
             OperandSize::Word => Ok(M68kInteger::Word(self.read_word(address)?)),
@@ -17,7 +17,7 @@ pub trait Memory: Display {
         }
     }
 
-    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError> {
+    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, EmulationError> {
         let mut bytes = Vec::with_capacity(len as usize);
         for i in 0..len {
             bytes.push(self.read_byte(address + i)?);
@@ -25,33 +25,33 @@ pub trait Memory: Display {
         Ok(bytes)
     }
 
-    fn read_word(&self, address: u32) -> Result<u16, CPUError> {
+    fn read_word(&self, address: u32) -> Result<u16, EmulationError> {
         let high_byte = self.read_byte(address)?;
         let low_byte = self.read_byte(address + 1)?;
         Ok(((high_byte as u16) << 8) + low_byte as u16)
     }
 
-    fn read_long(&self, address: u32) -> Result<u32, CPUError> {
+    fn read_long(&self, address: u32) -> Result<u32, EmulationError> {
         let high_word = self.read_word(address)?;
         let low_word = self.read_word(address + 2)?;
         Ok(((high_word as u32) << 16) + low_word as u32)
     }
 
-    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), CPUError> {
+    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), EmulationError> {
         match value {
             M68kInteger::Byte(value) => self.write_byte(address, value),
             M68kInteger::Word(value) => self.write_word(address, value),
             M68kInteger::Long(value) => self.write_long(address, value),
         }
     }
-    fn write_bytes(&mut self, address: u32, value: Vec<u8>) -> Result<(), CPUError> {
+    fn write_bytes(&mut self, address: u32, value: Vec<u8>) -> Result<(), EmulationError> {
         for (i, byte) in value.iter().enumerate() {
             self.write_byte(address + i as u32, *byte)?;
         }
         Ok(())
     }
 
-    fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError> {
+    fn write_word(&mut self, address: u32, value: u16) -> Result<(), EmulationError> {
         let low_byte = (value & 0x00FF) as u8;
         let high_byte = (value >> 8) as u8;
 
@@ -59,7 +59,7 @@ pub trait Memory: Display {
         self.write_byte(address + 1, low_byte)
     }
 
-    fn write_long(&mut self, address: u32, long: u32) -> Result<(), CPUError> {
+    fn write_long(&mut self, address: u32, long: u32) -> Result<(), EmulationError> {
         let low_word = (long & 0x0000FFFF) as u16;
         let high_word = (long >> 16) as u16;
 
@@ -122,20 +122,20 @@ impl Memory for VecBackedMemory {
         }
     }
 
-    fn read_byte(&self, address: u32) -> Result<u8, CPUError> {
+    fn read_byte(&self, address: u32) -> Result<u8, EmulationError> {
         match self.random_access_buf.get(address as usize) {
             Some(byte) => Ok(*byte),
-            None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
+            None => Err(EmulationError::MemoryOutOfBoundsAccess(address)),
         }
     }
 
-    fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError> {
+    fn write_byte(&mut self, address: u32, value: u8) -> Result<(), EmulationError> {
         match self.random_access_buf.get_mut(address as usize) {
             Some(byte) => {
                 *byte = value;
                 Ok(())
             }
-            None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
+            None => Err(EmulationError::MemoryOutOfBoundsAccess(address)),
         }
     }
 }

@@ -1,10 +1,6 @@
 //! CPU emulation
 //!
-//!  Each CPU has its own file, so you can do things like
-//! ```
-//! use emulator::cpu::isa_68000;
-//! ```
-//! to only use the 68000 instructions.
+//! In the future, CPU features (e.g. 68000 vs 68030) may be configurable via Cargo features.
 //!
 //! However, we don't support non-68000s yet, so it's not terribly relevant.
 
@@ -12,26 +8,14 @@ use colored::*;
 use std::fmt::Display;
 
 use crate::{
-    cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, ram::Memory, M68kInteger,
-    OperandSize,
+    parsers::{binary::MachineCodeParser, Parser},
+    ram::Memory,
+    EmulationError,
 };
 pub mod addressing;
 pub mod isa_68000;
 pub mod registers;
 use registers::*;
-
-/// Trait for all ISA enums to implement
-pub trait InstructionSet {
-    fn execute(&self, cpu: &mut CPU<impl Memory>, size: OperandSize) -> Result<(), CPUError>;
-}
-
-#[derive(Debug)]
-pub enum CPUError {
-    MemoryOutOfBoundsAccess(u32),
-    WriteToReadOnly(String),
-    WrongSizeInteger(M68kInteger),
-    InvalidOperandSize(i32),
-}
 
 pub struct CPU<M: Memory> {
     pub registers: Registers,
@@ -67,24 +51,17 @@ where
     /// - Decode the instruction
     ///
     /// - Execute the instruction
-    pub fn run_one_cycle(&mut self) -> Result<(), CPUError> {
+    pub fn run_one_cycle(&mut self) -> Result<(), EmulationError> {
         // Fetch
         let pc = self.registers.get(Register::ProgramCounter);
         let binary = self.memory.read_bytes(pc, 8)?;
+
         // Decode
-        let decoded_instruction =
-        // TODO: should this be be?
-        // it works for directly copying from a `gcc -Wl,--oformat=binary`...
-        m68kdecode::decode_instruction(binary.as_slice()).unwrap();
-        self.registers.set(
-            Register::ProgramCounter,
-            pc + decoded_instruction.bytes_used,
-        );
+        let (instruction, size) = self.parser.parse(binary)?;
+
         // Execute
-        let size = decoded_instruction.instruction.size;
-        let parsed_instruction: ISA68000 = decoded_instruction.instruction.into();
-        println!("{}: {:?}", "Execute".green().bold(), parsed_instruction);
-        parsed_instruction.execute(self, OperandSize::from_size_in_bytes(size)?)
+        println!("{}: {:?}", "Execute".green().bold(), instruction);
+        instruction.execute(self, size)
     }
 }
 

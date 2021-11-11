@@ -3,7 +3,22 @@
 
 use std::ops::{Add, Sub};
 
-use cpu::CPUError;
+use parsers::ParseError;
+
+#[derive(Debug)]
+pub enum EmulationError {
+    MemoryOutOfBoundsAccess(u32),
+    WriteToReadOnly(String),
+    WrongSizeInteger(M68kInteger),
+    InvalidOperandSize(i32),
+    Parsing(ParseError),
+}
+impl From<ParseError> for EmulationError {
+    fn from(err: ParseError) -> Self {
+        EmulationError::Parsing(err)
+    }
+}
+
 pub mod cpu;
 pub mod parsers;
 pub mod ram;
@@ -21,8 +36,8 @@ pub mod ram;
 /// in an addressing mode (as specified in an assembler or machine code instruction).
 /// For example, to read 16 bits from memory at the address 0xABC, use the following addressing:
 /// ```
-/// # use emulator::{cpu::{CPU, CPUError, addressing::*}, ram::{Memory, VecBackedMemory}, OperandSize, M68kInteger};
-/// # fn test() -> Result<(), CPUError> {
+/// # use emulator::{EmulationError, cpu::{CPU, addressing::*}, ram::{Memory, VecBackedMemory}, OperandSize, M68kInteger};
+/// # fn test() -> Result<(), EmulationError> {
 ///     let mut cpu = CPU::<VecBackedMemory>::new(1024);
 ///     cpu.memory.write_word(0xABC, 0xBEEF);
 ///
@@ -49,12 +64,12 @@ impl OperandSize {
         }
     }
 
-    pub fn from_size_in_bytes(size: i32) -> Result<Self, CPUError> {
+    pub fn from_size_in_bytes(size: i32) -> Result<Self, EmulationError> {
         match size {
             1 => Ok(OperandSize::Byte),
             2 => Ok(OperandSize::Word),
             4 => Ok(OperandSize::Long),
-            _ => Err(CPUError::InvalidOperandSize(size)),
+            _ => Err(EmulationError::InvalidOperandSize(size)),
         }
     }
 }
@@ -89,9 +104,9 @@ impl M68kInteger {
         size == self.size()
     }
 
-    pub fn check_size(&self, size: OperandSize) -> Result<(), CPUError> {
+    pub fn check_size(&self, size: OperandSize) -> Result<(), EmulationError> {
         if !self.is_size(size) {
-            Err(CPUError::WrongSizeInteger(*self))
+            Err(EmulationError::WrongSizeInteger(*self))
         } else {
             Ok(())
         }

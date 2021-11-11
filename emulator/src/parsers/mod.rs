@@ -5,10 +5,7 @@
 
 use std::num::{ParseIntError, TryFromIntError};
 
-use crate::{
-    cpu::{isa_68000::ISA68000},
-    OperandSize,
-};
+use crate::{cpu::isa_68000::Instruction, OperandSize};
 pub mod assembly;
 pub mod binary;
 
@@ -45,28 +42,17 @@ pub enum ParseError {
         dest_size: OperandSize,
     },
     NumberTooLarge(TryFromIntError),
+    OpcodeParsingError(m68kdecode::DecodingError),
+    InvalidOperandSize(i32),
+}
+
+impl From<m68kdecode::DecodingError> for ParseError {
+    fn from(error: m68kdecode::DecodingError) -> Self {
+        Self::OpcodeParsingError(error)
+    }
 }
 
 /// A parser
 pub trait Parser<T> {
-    fn parse(&mut self, source: T) -> Result<Vec<(ISA68000, OperandSize)>, ParseError>;
-}
-
-/// An incremental parser, suitable for a REPL
-pub trait Interpreter<T> {
-    fn parse_instruction(&mut self, source: T) -> Result<(ISA68000, OperandSize), ParseError>;
-}
-
-impl<T, P> Parser<Vec<T>> for P
-where
-    P: Interpreter<T>,
-    T: Sized,
-{
-    fn parse(&mut self, source: Vec<T>) -> Result<Vec<(ISA68000, OperandSize)>, ParseError> {
-        let mut instructions = Vec::new();
-        for item in source {
-            instructions.push(self.parse_instruction(item)?);
-        }
-        Ok(instructions)
-    }
+    fn parse(&mut self, source: T) -> Result<(Instruction, OperandSize), ParseError>;
 }

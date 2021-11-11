@@ -1,6 +1,6 @@
 //! Parses assembly code
 
-use super::{Interpreter, ParseError};
+use super::{ParseError, Parser};
 use crate::cpu::{
     addressing::AddressMode,
     isa_68000::*,
@@ -394,7 +394,7 @@ impl AssemblyInterpreter {
 
                     let size = match source_size {
                         Some(size) => Some(size),
-                        None => dest_size.map(|size| size),
+                        None => dest_size,
                     };
 
                     return Ok((source_mode, dest_mode, size));
@@ -407,8 +407,8 @@ impl AssemblyInterpreter {
     }
 }
 
-impl Interpreter<String> for AssemblyInterpreter {
-    fn parse_instruction(&mut self, source: String) -> Result<(ISA68000, OperandSize), ParseError> {
+impl Parser<String> for AssemblyInterpreter {
+    fn parse(&mut self, source: String) -> Result<(Instruction, OperandSize), ParseError> {
         let lowercase_source = source.to_lowercase();
         let (instruction_token, rest) = match lowercase_source.trim().split_once(' ') {
             Some(s) => s,
@@ -418,20 +418,20 @@ impl Interpreter<String> for AssemblyInterpreter {
         let size = size.unwrap_or(OperandSize::Long);
 
         match instruction_token {
-            "add" => Ok((ISA68000::Add { src, dest }, size)),
-            "sub" => Ok((ISA68000::Subtract { src, dest }, size)),
-            "mulu" => Ok((ISA68000::MultiplyUnsigned { src, dest }, size)),
-            "move" => Ok((ISA68000::Move { src, dest }, size)),
+            "add" => Ok((Instruction::Add { src, dest }, size)),
+            "sub" => Ok((Instruction::Subtract { src, dest }, size)),
+            "mulu" => Ok((Instruction::MultiplyUnsigned { src, dest }, size)),
+            "move" => Ok((Instruction::Move { src, dest }, size)),
             "roxl" => Ok((
-                ISA68000::RotateLeft {
+                Instruction::RotateLeft {
                     to_rotate: src,
                     rotate_amount: dest,
                 },
                 size,
             )),
-            "eor" => Ok((ISA68000::ExclusiveOr { src, dest }, size)),
-            "or" => Ok((ISA68000::InclusiveOr { src, dest }, size)),
-            "nop" => Ok((ISA68000::NoOp, size)),
+            "eor" => Ok((Instruction::ExclusiveOr { src, dest }, size)),
+            "or" => Ok((Instruction::InclusiveOr { src, dest }, size)),
+            "nop" => Ok((Instruction::NoOp, size)),
             _ => Err(ParseError::UnknownInstruction(
                 instruction_token.to_string(),
             )),
@@ -454,15 +454,15 @@ mod tests {
 
     /// Tests a source/desination instruction.
     ///
-    /// gen_instruction is a closure of the form |src, dest| -> ISA68000
+    /// gen_instruction is a closure of the form |src, dest| -> Instruction
     ///
     /// For example:
     /// ```
-    /// test_source_dest_instruction("MOVE", |src, dest| ISA68000::Move { src, dest });
+    /// test_source_dest_instruction("MOVE", |src, dest| Instruction::Move { src, dest });
     /// ```
     fn test_source_dest_instruction(
         instruction: &str,
-        gen_instruction: impl Fn(AddressMode, AddressMode) -> ISA68000,
+        gen_instruction: impl Fn(AddressMode, AddressMode) -> Instruction,
     ) {
         for (asm, src, dest) in [
             (
@@ -488,7 +488,7 @@ mod tests {
             let mut interpreter = AssemblyInterpreter::new();
             assert_eq!(
                 interpreter
-                    .parse_instruction(format!("{} {}", instruction, asm))
+                    .parse(format!("{} {}", instruction, asm))
                     .unwrap()
                     .0,
                 gen_instruction(src, dest)
@@ -498,22 +498,25 @@ mod tests {
 
     #[test]
     fn parse_move() {
-        test_source_dest_instruction("MOVE", |src, dest| ISA68000::Move { src, dest });
+        test_source_dest_instruction("MOVE", |src, dest| Instruction::Move { src, dest });
     }
 
     #[test]
     fn parse_add() {
-        test_source_dest_instruction("ADD", |src, dest| ISA68000::Add { src, dest });
+        test_source_dest_instruction("ADD", |src, dest| Instruction::Add { src, dest });
     }
 
     #[test]
     fn parse_subtract() {
-        test_source_dest_instruction("SUB", |src, dest| ISA68000::Subtract { src, dest });
+        test_source_dest_instruction("SUB", |src, dest| Instruction::Subtract { src, dest });
     }
 
     #[test]
     fn parse_unsigned_multiplication() {
-        test_source_dest_instruction("MULU", |src, dest| ISA68000::MultiplyUnsigned { src, dest });
+        test_source_dest_instruction("MULU", |src, dest| Instruction::MultiplyUnsigned {
+            src,
+            dest,
+        });
     }
 
     #[test]
