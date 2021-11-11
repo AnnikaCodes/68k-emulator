@@ -88,8 +88,9 @@
 //! UNLK (Unlink)
 
 use crate::{
-    cpu::{addressing::AddressMode, CPUError, CPU, registers::Register},
+    cpu::{addressing::AddressMode, registers::Register, CPUError, CPU},
     ram::Memory,
+    OperandSize,
 };
 use colored::*;
 use m68kdecode::{Instruction, Operation};
@@ -130,39 +131,43 @@ pub enum ISA68000 {
         to_rotate: AddressMode,
         rotate_amount: AddressMode,
     },
-    JumpTo { address: AddressMode },
+    JumpTo {
+        address: AddressMode,
+    },
     NoOp,
 }
 
 impl InstructionSet for ISA68000 {
-    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError> {
+    fn execute(&self, cpu: &mut CPU<impl Memory>, size: OperandSize) -> Result<(), CPUError> {
         match self {
             ISA68000::Add { src, dest } => {
-                let val = src.get_value(cpu)? + dest.get_value(cpu)?;
+                let val = src.get_value(cpu, size)? + dest.get_value(cpu, size)?;
                 dest.set_value(cpu, val)
             }
             ISA68000::Subtract { src, dest } => {
-                let val = src.get_value(cpu)? - dest.get_value(cpu)?;
+                let val = src.get_value(cpu, size)? - dest.get_value(cpu, size)?;
                 dest.set_value(cpu, val)
             }
             ISA68000::MultiplyUnsigned { src, dest } => {
-                let val = src.get_value(cpu)?.wrapping_mul(dest.get_value(cpu)?);
+                let val = src
+                    .get_value(cpu, size)?
+                    .wrapping_mul(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
             ISA68000::Move { src, dest } => {
-                let val = src.get_value(cpu)?;
+                let val = src.get_value(cpu, size)?;
                 dest.set_value(cpu, val)
             }
             ISA68000::ExclusiveOr { src, dest } => {
-                let val = src.get_value(cpu)?.xor(dest.get_value(cpu)?);
+                let val = src.get_value(cpu, size)?.xor(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
             ISA68000::InclusiveOr { src, dest } => {
-                let val = src.get_value(cpu)?.or(dest.get_value(cpu)?);
+                let val = src.get_value(cpu, size)?.or(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
             ISA68000::And { src, dest } => {
-                let val = src.get_value(cpu)?.and(dest.get_value(cpu)?);
+                let val = src.get_value(cpu, size)?.and(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
             ISA68000::RotateLeft {
@@ -170,12 +175,12 @@ impl InstructionSet for ISA68000 {
                 rotate_amount,
             } => {
                 let val = to_rotate
-                    .get_value(cpu)?
-                    .rotate_left(rotate_amount.get_value(cpu)?);
+                    .get_value(cpu, size)?
+                    .rotate_left(rotate_amount.get_value(cpu, size)?);
                 to_rotate.set_value(cpu, val)
             }
             ISA68000::JumpTo { address } => {
-                let val = address.get_value(cpu)?;
+                let val = address.get_value(cpu, size)?;
                 cpu.registers.set(Register::ProgramCounter, val);
                 Ok(())
             }
@@ -231,7 +236,9 @@ impl From<Instruction> for ISA68000 {
             _ => {
                 eprintln!(
                     "{}: {} for instruction {:?}",
-                    "Unknown operation".red().bold(), format!("{:?}", instruction.operation).cyan().bold(), instruction
+                    "Unknown operation".red().bold(),
+                    format!("{:?}", instruction.operation).cyan().bold(),
+                    instruction
                 );
                 ISA68000::NoOp
             }
@@ -254,17 +261,11 @@ mod test {
     #[test]
     fn move_instruction() {
         let mut cpu = CPU::<VecBackedMemory>::new(1024);
-        let dest = AddressMode::Absolute {
-            address: ADDRESS,
-            size: OperandSize::Long,
-        };
-        let src = AddressMode::Immediate {
-            value: VALUE,
-            size: OperandSize::Long,
-        };
+        let dest = AddressMode::Absolute { address: ADDRESS };
+        let src = AddressMode::Immediate { value: VALUE };
         let instruction = ISA68000::Move { src, dest };
 
-        instruction.execute(&mut cpu).unwrap();
+        instruction.execute(&mut cpu, OperandSize::Long).unwrap();
         assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);
     }
 
@@ -273,14 +274,8 @@ mod test {
         for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xFFFFFFFF, 1, 0x00000000u32)] {
             let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
-            let src = AddressMode::Immediate {
-                value: a,
-                size: OperandSize::Long,
-            };
-            let dest = AddressMode::Absolute {
-                address: ADDRESS,
-                size: OperandSize::Long,
-            };
+            let src = AddressMode::Immediate { value: a };
+            let dest = AddressMode::Absolute { address: ADDRESS };
             dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
 
             let instruction = ISA68000::Add {
@@ -288,8 +283,11 @@ mod test {
                 dest: dest.clone(),
             };
 
-            instruction.execute(cpu).unwrap();
-            assert_eq!(dest.get_value(cpu).unwrap(), M68kInteger::Long(result));
+            instruction.execute(cpu, OperandSize::Long).unwrap();
+            assert_eq!(
+                dest.get_value(cpu, OperandSize::Long).unwrap(),
+                M68kInteger::Long(result)
+            );
         }
     }
 
@@ -299,14 +297,8 @@ mod test {
         for (a, b, result) in [(1, 2, 0xFFFFFFFF), (0, 0, 0), (20, 10, 10)] {
             let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
-            let src = AddressMode::Immediate {
-                value: a,
-                size: OperandSize::Long,
-            };
-            let dest = AddressMode::Absolute {
-                address: ADDRESS,
-                size: OperandSize::Long,
-            };
+            let src = AddressMode::Immediate { value: a };
+            let dest = AddressMode::Absolute { address: ADDRESS };
             dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
 
             let instruction = ISA68000::Subtract {
@@ -314,8 +306,11 @@ mod test {
                 dest: dest.clone(),
             };
 
-            instruction.execute(cpu).unwrap();
-            assert_eq!(dest.get_value(cpu).unwrap(), M68kInteger::Long(result));
+            instruction.execute(cpu, OperandSize::Long).unwrap();
+            assert_eq!(
+                dest.get_value(cpu, OperandSize::Long).unwrap(),
+                M68kInteger::Long(result)
+            );
         }
     }
 
@@ -329,14 +324,8 @@ mod test {
         ] {
             let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
-            let src = AddressMode::Immediate {
-                value: a,
-                size: OperandSize::Long,
-            };
-            let dest = AddressMode::Absolute {
-                address: ADDRESS,
-                size: OperandSize::Long,
-            };
+            let src = AddressMode::Immediate { value: a };
+            let dest = AddressMode::Absolute { address: ADDRESS };
             dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
 
             let instruction = ISA68000::MultiplyUnsigned {
@@ -344,8 +333,11 @@ mod test {
                 dest: dest.clone(),
             };
 
-            instruction.execute(cpu).unwrap();
-            assert_eq!(dest.get_value(cpu).unwrap(), M68kInteger::Long(result));
+            instruction.execute(cpu, OperandSize::Long).unwrap();
+            assert_eq!(
+                dest.get_value(cpu, OperandSize::Long).unwrap(),
+                M68kInteger::Long(result)
+            );
         }
     }
 }

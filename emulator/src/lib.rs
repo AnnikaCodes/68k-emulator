@@ -21,10 +21,15 @@ pub mod ram;
 /// in an addressing mode (as specified in an assembler or machine code instruction).
 /// For example, to read 16 bits from memory at the address 0xABC, use the following addressing:
 /// ```
-/// # use emulator::{cpu::{CPU, addressing::*}, ram::VecBackedMemory, OperandSize};
-/// let mut cpu = CPU::<VecBackedMemory>::new(1024);
-/// let address = AddressMode::Absolute { address: 0xABC, size: OperandSize::Word };
-/// address.get_value(&mut cpu);
+/// # use emulator::{cpu::{CPU, CPUError, addressing::*}, ram::{Memory, VecBackedMemory}, OperandSize, M68kInteger};
+/// # fn test() -> Result<(), CPUError> {
+///     let mut cpu = CPU::<VecBackedMemory>::new(1024);
+///     cpu.memory.write_word(0xABC, 0xBEEF);
+///
+///     let address = AddressMode::Absolute { address: 0xABC };
+///     assert_eq!(address.get_value(&mut cpu, OperandSize::Word)?, M68kInteger::Word(0xBEEF));
+/// #     Ok(())
+/// # }
 /// ```
 ///
 /// `M68kInteger` is a wrapper enum which represents a byte, word, or long (internally as a Rust u8, u16, or u32).
@@ -72,12 +77,16 @@ impl From<M68kInteger> for u32 {
 }
 
 impl M68kInteger {
-    pub fn is_size(&self, size: OperandSize) -> bool {
+    pub fn size(&self) -> OperandSize {
         match self {
-            M68kInteger::Byte(_) => size == OperandSize::Byte,
-            M68kInteger::Word(_) => size == OperandSize::Word,
-            M68kInteger::Long(_) => size == OperandSize::Long,
+            M68kInteger::Byte(_) => OperandSize::Byte,
+            M68kInteger::Word(_) => OperandSize::Word,
+            M68kInteger::Long(_) => OperandSize::Long,
         }
+    }
+
+    pub fn is_size(&self, size: OperandSize) -> bool {
+        size == self.size()
     }
 
     pub fn check_size(&self, size: OperandSize) -> Result<(), CPUError> {

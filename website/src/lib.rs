@@ -1,5 +1,5 @@
 use emulator::{
-    cpu::CPU,
+    cpu::{InstructionSet, CPU},
     parsers::{assembly::AssemblyInterpreter, Interpreter},
     ram::{Memory, VecBackedMemory},
 };
@@ -20,8 +20,8 @@ impl REPLBackend {
 
     pub fn interpret_assembly(&mut self, assembly: String) -> String {
         match self.interpreter.parse_instruction(assembly.clone()) {
-            Ok(instruction) => {
-                if let Err(e) = self.cpu.run_instruction(instruction) {
+            Ok((instruction, size)) => {
+                if let Err(e) = instruction.execute(&mut self.cpu, size) {
                     format!("Error: {:?}\n{}", e, self.cpu)
                 } else {
                     format!("Ran assembly '{}'\n{}", assembly, self.cpu)

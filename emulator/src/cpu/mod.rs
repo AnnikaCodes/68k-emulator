@@ -8,12 +8,12 @@
 //!
 //! However, we don't support non-68000s yet, so it's not terribly relevant.
 
-use std::fmt::Display;
 use colored::*;
+use std::fmt::Display;
 
 use crate::{
-    cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, ram::Memory,
-    M68kInteger,
+    cpu::isa_68000::ISA68000, parsers::binary::MachineCodeParser, ram::Memory, M68kInteger,
+    OperandSize,
 };
 pub mod addressing;
 pub mod isa_68000;
@@ -24,7 +24,7 @@ use self::addressing::AddressMode;
 
 /// Trait for all ISA enums to implement
 pub trait InstructionSet {
-    fn execute(&self, cpu: &mut CPU<impl Memory>) -> Result<(), CPUError>;
+    fn execute(&self, cpu: &mut CPU<impl Memory>, size: OperandSize) -> Result<(), CPUError>;
 }
 
 #[derive(Debug)]
@@ -83,18 +83,10 @@ where
             pc + decoded_instruction.bytes_used,
         );
         // Execute
+        let size = decoded_instruction.instruction.size;
         let parsed_instruction: ISA68000 = decoded_instruction.instruction.into();
-        println!("{}: {:?}", "Execute".green().bold(),  parsed_instruction);
-        parsed_instruction.execute(self)
-    }
-
-    /// Syntactic sugar
-    pub fn run_instruction(&mut self, instruction: impl InstructionSet) -> Result<(), CPUError> {
-        instruction.execute(self)
-    }
-
-    pub fn get_address_value(&mut self, addr: AddressMode) -> Result<M68kInteger, CPUError> {
-        addr.get_value(self)
+        println!("{}: {:?}", "Execute".green().bold(), parsed_instruction);
+        parsed_instruction.execute(self, OperandSize::from_size_in_bytes(size)?)
     }
 }
 

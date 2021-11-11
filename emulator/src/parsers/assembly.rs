@@ -1,6 +1,5 @@
 //! Parses assembly code
 
-
 use super::{Interpreter, ParseError};
 use crate::cpu::{
     addressing::AddressMode,
@@ -27,20 +26,25 @@ impl AssemblyInterpreter {
     /// Parses an operand to an address
     ///
     /// TODO: figure out how different operand sizes are represented & handle accordingly in unit tests
-    fn parse_to_operand(op_string: &str, instruction: &str) -> Result<AddressMode, ParseError> {
+    fn parse_to_operand(
+        op_string: &str,
+        instruction: &str,
+    ) -> Result<(AddressMode, Option<OperandSize>), ParseError> {
         let mut chars = op_string.chars();
         let first = chars.next();
         match first {
             // Register Direct
             Some('d' | 'a' | 's') => {
                 let (register, size) = Self::parse_to_register(op_string)?;
-                Ok(AddressMode::RegisterDirect { register, size })
+                Ok((AddressMode::RegisterDirect { register }, size))
             }
             // Immediate
-            Some('#') => Ok(AddressMode::Immediate {
-                value: Self::parse_to_number(&op_string[1..])?,
-                size: OperandSize::Long,
-            }),
+            Some('#') => Ok((
+                AddressMode::Immediate {
+                    value: Self::parse_to_number(&op_string[1..])?,
+                },
+                None,
+            )),
             // Indirect Stuff + Absolute
             Some('(' | '-') => {
                 // Absolute
@@ -51,7 +55,7 @@ impl AssemblyInterpreter {
                         let address = Self::parse_to_number(
                             &address_asm.replace(|c| c == '(' || c == ')', ""),
                         )?;
-                        return Ok(AddressMode::Absolute { address, size });
+                        return Ok((AddressMode::Absolute { address }, size));
                     }
                 }
 
@@ -97,11 +101,14 @@ impl AssemblyInterpreter {
                                 instruction: instruction.to_string(),
                             })
                         } else if is_postincr {
-                            Ok(AddressMode::RegisterIndirectPostIncrement { register, size })
+                            Ok((
+                                AddressMode::RegisterIndirectPostIncrement { register },
+                                size,
+                            ))
                         } else if is_predecr {
-                            Ok(AddressMode::RegisterIndirectPreDecrement { register, size })
+                            Ok((AddressMode::RegisterIndirectPreDecrement { register }, size))
                         } else {
-                            Ok(AddressMode::RegisterIndirect { register, size })
+                            Ok((AddressMode::RegisterIndirect { register }, size))
                         }
                     }
                     // Displacement
@@ -110,19 +117,19 @@ impl AssemblyInterpreter {
                         let displacement = to_u16(Self::parse_to_number(displacement)?)?;
 
                         match Self::parse_to_register(register)? {
-                            (Register::Address(reg), size) => {
-                                Ok(AddressMode::RegisterIndirectWithDisplacement {
+                            (Register::Address(reg), size) => Ok((
+                                AddressMode::RegisterIndirectWithDisplacement {
                                     displacement,
                                     register: reg,
-                                    size,
-                                })
-                            }
-                            (Register::ProgramCounter, size) => {
-                                Ok(AddressMode::ProgramCounterIndirectWithDisplacement {
+                                },
+                                size,
+                            )),
+                            (Register::ProgramCounter, size) => Ok((
+                                AddressMode::ProgramCounterIndirectWithDisplacement {
                                     displacement,
-                                    size,
-                                })
-                            }
+                                },
+                                size,
+                            )),
                             _ => Err(ParseError::InvalidOperand {
                                 operand: op_string.to_string(),
                                 instruction: instruction.to_string(),
@@ -136,21 +143,21 @@ impl AssemblyInterpreter {
                         let (index_register, size) = Self::parse_to_register(parts[2].trim())?;
 
                         match address_register {
-                            Register::Address(reg) => Ok(AddressMode::RegisterIndirectIndexed {
-                                displacement,
-                                address_register: reg,
-                                index_register,
-                                index_scale: size.into(),
+                            Register::Address(reg) => Ok((
+                                AddressMode::RegisterIndirectIndexed {
+                                    displacement,
+                                    address_register: reg,
+                                    index_register,
+                                },
                                 size,
-                            }),
-                            Register::ProgramCounter => {
-                                Ok(AddressMode::ProgramCounterIndirectIndexed {
+                            )),
+                            Register::ProgramCounter => Ok((
+                                AddressMode::ProgramCounterIndirectIndexed {
                                     displacement,
                                     index_register,
-                                    index_scale: size.into(),
-                                    size,
-                                })
-                            }
+                                },
+                                size,
+                            )),
                             _ => Err(ParseError::InvalidRegister {
                                 register: parts[1].to_string(),
                                 instruction: instruction.to_string(),
@@ -226,23 +233,23 @@ impl AssemblyInterpreter {
                         };
                         if is_preindexed {
                             match address_register {
-                                Register::Address(reg) => Ok(AddressMode::MemoryPreIndexed {
-                                    base_displacement,
-                                    address_register: reg,
-                                    index_register,
-                                    index_scale: size.into(),
-                                    outer_displacement,
+                                Register::Address(reg) => Ok((
+                                    AddressMode::MemoryPreIndexed {
+                                        base_displacement,
+                                        address_register: reg,
+                                        index_register,
+                                        outer_displacement,
+                                    },
                                     size,
-                                }),
-                                Register::ProgramCounter => {
-                                    Ok(AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+                                )),
+                                Register::ProgramCounter => Ok((
+                                    AddressMode::ProgramCounterMemoryIndirectPreIndexed {
                                         base_displacement,
                                         index_register,
-                                        index_scale: size.into(),
                                         outer_displacement,
-                                        size,
-                                    })
-                                }
+                                    },
+                                    size,
+                                )),
                                 _ => Err(ParseError::InvalidOperand {
                                     operand: op_string.to_string(),
                                     instruction: instruction.to_string(),
@@ -250,23 +257,23 @@ impl AssemblyInterpreter {
                             }
                         } else {
                             match address_register {
-                                Register::Address(reg) => Ok(AddressMode::MemoryPostIndexed {
-                                    base_displacement,
-                                    address_register: reg,
-                                    index_register,
-                                    index_scale: size.into(),
-                                    outer_displacement,
+                                Register::Address(reg) => Ok((
+                                    AddressMode::MemoryPostIndexed {
+                                        base_displacement,
+                                        address_register: reg,
+                                        index_register,
+                                        outer_displacement,
+                                    },
                                     size,
-                                }),
-                                Register::ProgramCounter => {
-                                    Ok(AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+                                )),
+                                Register::ProgramCounter => Ok((
+                                    AddressMode::ProgramCounterMemoryIndirectPostIndexed {
                                         base_displacement,
                                         index_register,
-                                        index_scale: size.into(),
                                         outer_displacement,
-                                        size,
-                                    })
-                                }
+                                    },
+                                    size,
+                                )),
                                 _ => Err(ParseError::InvalidOperand {
                                     operand: op_string.to_string(),
                                     instruction: instruction.to_string(),
@@ -305,21 +312,21 @@ impl AssemblyInterpreter {
     }
 
     /// Parses a string to a register and size
-    fn parse_to_register(register: &str) -> Result<(Register, OperandSize), ParseError> {
+    fn parse_to_register(register: &str) -> Result<(Register, Option<OperandSize>), ParseError> {
         let (reg, size) = Self::parse_size_suffix(register)?;
         Ok((Self::parse_to_register_no_size(reg)?, size))
     }
 
     /// Gets a size suffix
-    fn parse_size_suffix(operand: &str) -> Result<(&str, OperandSize), ParseError> {
+    fn parse_size_suffix(operand: &str) -> Result<(&str, Option<OperandSize>), ParseError> {
         if let Some(operand) = operand.strip_suffix(".b") {
-            Ok((operand, OperandSize::Byte))
+            Ok((operand, Some(OperandSize::Byte)))
         } else if let Some(operand) = operand.strip_suffix(".w") {
-            Ok((operand, OperandSize::Word))
+            Ok((operand, Some(OperandSize::Word)))
         } else if let Some(operand) = operand.strip_suffix(".l") {
-            Ok((operand, OperandSize::Long))
+            Ok((operand, Some(OperandSize::Long)))
         } else {
-            Ok((operand, OperandSize::Long))
+            Ok((operand, None))
         }
     }
 
@@ -354,7 +361,7 @@ impl AssemblyInterpreter {
     fn parse_source_dest(
         op_string: &str,
         instruction: String,
-    ) -> Result<(AddressMode, AddressMode), ParseError> {
+    ) -> Result<(AddressMode, AddressMode, Option<OperandSize>), ParseError> {
         let mut paren_level: u32 = 0;
         for (idx, token) in op_string.chars().enumerate() {
             match token {
@@ -369,12 +376,31 @@ impl AssemblyInterpreter {
                 // they are part of the assembly representation of certain addressing modes.
                 ',' if paren_level == 0 => {
                     let (source_asm, dest_asm) = op_string.split_at(idx);
-                    let source = Self::parse_to_operand(source_asm.trim(), &instruction)?;
-                    let destination = Self::parse_to_operand(
+                    let (source_mode, source_size) =
+                        Self::parse_to_operand(source_asm.trim(), &instruction)?;
+                    let (dest_mode, dest_size) = Self::parse_to_operand(
                         dest_asm.trim_start_matches(|c| c == ' ' || c == ','),
                         &instruction,
                     )?;
-                    return Ok((source, destination));
+
+                    // Please, Rust, stabilize multiple `if let`s in one statement :(
+                    if source_size.is_some() && dest_size.is_some() && source_size != dest_size {
+                        return Err(ParseError::OperandSizeMismatch {
+                            instruction,
+                            source_size: source_size.unwrap(),
+                            dest_size: dest_size.unwrap(),
+                        });
+                    }
+
+                    let size = match source_size {
+                        Some(size) => Some(size),
+                        None => match dest_size {
+                            Some(size) => Some(size),
+                            None => None,
+                        },
+                    };
+
+                    return Ok((source_mode, dest_mode, size));
                 }
                 _ => {}
             }
@@ -385,26 +411,30 @@ impl AssemblyInterpreter {
 }
 
 impl Interpreter<String> for AssemblyInterpreter {
-    fn parse_instruction(&mut self, source: String) -> Result<ISA68000, ParseError> {
+    fn parse_instruction(&mut self, source: String) -> Result<(ISA68000, OperandSize), ParseError> {
         let lowercase_source = source.to_lowercase();
         let (instruction_token, rest) = match lowercase_source.trim().split_once(' ') {
             Some(s) => s,
             None => return Err(ParseError::NoInstruction(source)),
         };
-        let (src, dest) = Self::parse_source_dest(rest, source)?;
+        let (src, dest, size) = Self::parse_source_dest(rest, source)?;
+        let size = size.unwrap_or(OperandSize::Long);
 
         match instruction_token {
-            "add" => Ok(ISA68000::Add { src, dest }),
-            "sub" => Ok(ISA68000::Subtract { src, dest }),
-            "mulu" => Ok(ISA68000::MultiplyUnsigned { src, dest }),
-            "move" => Ok(ISA68000::Move { src, dest }),
-            "roxl" => Ok(ISA68000::RotateLeft {
-                to_rotate: src,
-                rotate_amount: dest,
-            }),
-            "eor" => Ok(ISA68000::ExclusiveOr { src, dest }),
-            "or" => Ok(ISA68000::InclusiveOr { src, dest }),
-            "nop" => Ok(ISA68000::NoOp),
+            "add" => Ok((ISA68000::Add { src, dest }, size)),
+            "sub" => Ok((ISA68000::Subtract { src, dest }, size)),
+            "mulu" => Ok((ISA68000::MultiplyUnsigned { src, dest }, size)),
+            "move" => Ok((ISA68000::Move { src, dest }, size)),
+            "roxl" => Ok((
+                ISA68000::RotateLeft {
+                    to_rotate: src,
+                    rotate_amount: dest,
+                },
+                size,
+            )),
+            "eor" => Ok((ISA68000::ExclusiveOr { src, dest }, size)),
+            "or" => Ok((ISA68000::InclusiveOr { src, dest }, size)),
+            "nop" => Ok((ISA68000::NoOp, size)),
             _ => Err(ParseError::UnknownInstruction(
                 instruction_token.to_string(),
             )),
@@ -442,11 +472,9 @@ mod tests {
                 "a0, a1",
                 AddressMode::RegisterDirect {
                     register: Address(AddressRegister::A0),
-                    size: Long,
                 },
                 AddressMode::RegisterDirect {
                     register: Address(AddressRegister::A1),
-                    size: Long,
                 },
             ),
             (
@@ -454,11 +482,9 @@ mod tests {
                 AddressMode::RegisterIndirectWithDisplacement {
                     register: AddressRegister::A5,
                     displacement: 12,
-                    size: Long,
                 },
                 AddressMode::RegisterDirect {
                     register: Data(DataRegister::D3),
-                    size: Long,
                 },
             ),
         ] {
@@ -466,7 +492,8 @@ mod tests {
             assert_eq!(
                 interpreter
                     .parse_instruction(format!("{} {}", instruction, asm))
-                    .unwrap(),
+                    .unwrap()
+                    .0,
                 gen_instruction(src, dest)
             );
         }
@@ -502,10 +529,7 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::RegisterDirect {
-                    register,
-                    size: Long,
-                }
+                (AddressMode::RegisterDirect { register }, None)
             );
         }
     }
@@ -519,10 +543,7 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::RegisterIndirect {
-                    register,
-                    size: Long,
-                }
+                (AddressMode::RegisterIndirect { register }, None)
             );
         }
     }
@@ -536,10 +557,10 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::RegisterIndirectPostIncrement {
-                    register,
-                    size: Long,
-                }
+                (
+                    AddressMode::RegisterIndirectPostIncrement { register },
+                    None
+                )
             );
         }
     }
@@ -553,10 +574,7 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::RegisterIndirectPreDecrement {
-                    register,
-                    size: Long,
-                }
+                (AddressMode::RegisterIndirectPreDecrement { register }, None)
             );
         }
     }
@@ -570,11 +588,13 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::RegisterIndirectWithDisplacement {
-                    register,
-                    displacement,
-                    size: Long,
-                }
+                (
+                    AddressMode::RegisterIndirectWithDisplacement {
+                        register,
+                        displacement
+                    },
+                    None
+                )
             );
         }
     }
@@ -606,13 +626,14 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::RegisterIndirectIndexed {
-                    address_register,
-                    index_register,
-                    index_scale: size.into(),
-                    displacement,
-                    size,
-                }
+                (
+                    AddressMode::RegisterIndirectIndexed {
+                        address_register,
+                        index_register,
+                        displacement,
+                    },
+                    Some(size)
+                )
             );
         }
     }
@@ -654,14 +675,15 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::MemoryPostIndexed {
-                    address_register,
-                    index_register,
-                    index_scale: size.into(),
-                    base_displacement,
-                    outer_displacement,
-                    size,
-                }
+                (
+                    AddressMode::MemoryPostIndexed {
+                        address_register,
+                        index_register,
+                        base_displacement,
+                        outer_displacement,
+                    },
+                    Some(size)
+                )
             );
         }
     }
@@ -703,28 +725,28 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::MemoryPreIndexed {
-                    address_register,
-                    index_register,
-                    index_scale: size.into(),
-                    base_displacement,
-                    outer_displacement,
-                    size,
-                }
+                (
+                    AddressMode::MemoryPreIndexed {
+                        address_register,
+                        index_register,
+                        base_displacement,
+                        outer_displacement,
+                    },
+                    Some(size)
+                )
             );
         }
     }
 
     #[test]
     fn parse_to_operand_pc_indirect_with_displacement() {
-        for (operand, displacement, size) in [
-            ("(1, pc)", 1, Long),
-            ("(8, pc)", 8, Long),
-            ("(952, pc)", 952, Long),
-        ] {
+        for (operand, displacement) in [("(1, pc)", 1), ("(8, pc)", 8), ("(952, pc)", 952)] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::ProgramCounterIndirectWithDisplacement { displacement, size }
+                (
+                    AddressMode::ProgramCounterIndirectWithDisplacement { displacement },
+                    None
+                )
             );
         }
     }
@@ -738,12 +760,13 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::ProgramCounterIndirectIndexed {
-                    index_register,
-                    index_scale: size.into(),
-                    displacement,
-                    size,
-                }
+                (
+                    AddressMode::ProgramCounterIndirectIndexed {
+                        index_register,
+                        displacement,
+                    },
+                    Some(size)
+                )
             );
         }
     }
@@ -763,13 +786,14 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::ProgramCounterMemoryIndirectPostIndexed {
-                    index_register,
-                    index_scale: size.into(),
-                    base_displacement,
-                    outer_displacement,
-                    size,
-                }
+                (
+                    AddressMode::ProgramCounterMemoryIndirectPostIndexed {
+                        index_register,
+                        base_displacement,
+                        outer_displacement,
+                    },
+                    Some(size)
+                )
             );
         }
     }
@@ -789,13 +813,14 @@ mod tests {
         ] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::ProgramCounterMemoryIndirectPreIndexed {
-                    index_register,
-                    index_scale: size.into(),
-                    base_displacement,
-                    outer_displacement,
-                    size,
-                }
+                (
+                    AddressMode::ProgramCounterMemoryIndirectPreIndexed {
+                        index_register,
+                        base_displacement,
+                        outer_displacement,
+                    },
+                    Some(size)
+                )
             );
         }
     }
@@ -805,7 +830,7 @@ mod tests {
         for (operand, address, size) in [("($400).w", 0x400, Word), ("($b4a).l", 0xB4A, Long)] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::Absolute { address, size }
+                (AddressMode::Absolute { address }, Some(size))
             );
         }
     }
@@ -816,7 +841,7 @@ mod tests {
         for (operand, value, size) in [("#$400", 0x400, Long)] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
-                AddressMode::Immediate { value, size }
+                (AddressMode::Immediate { value }, None)
             );
         }
     }

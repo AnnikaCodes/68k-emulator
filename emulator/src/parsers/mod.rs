@@ -5,7 +5,10 @@
 
 use std::num::{ParseIntError, TryFromIntError};
 
-use crate::cpu::isa_68000::ISA68000;
+use crate::{
+    cpu::{isa_68000::ISA68000, InstructionSet},
+    OperandSize,
+};
 pub mod assembly;
 pub mod binary;
 
@@ -36,17 +39,22 @@ pub enum ParseError {
         number: String,
         error: ParseIntError,
     },
+    OperandSizeMismatch {
+        instruction: String,
+        source_size: OperandSize,
+        dest_size: OperandSize,
+    },
     NumberTooLarge(TryFromIntError),
 }
 
 /// A parser
 pub trait Parser<T> {
-    fn parse(&mut self, source: T) -> Result<Vec<ISA68000>, ParseError>;
+    fn parse(&mut self, source: T) -> Result<Vec<(ISA68000, OperandSize)>, ParseError>;
 }
 
 /// An incremental parser, suitable for a REPL
 pub trait Interpreter<T> {
-    fn parse_instruction(&mut self, source: T) -> Result<ISA68000, ParseError>;
+    fn parse_instruction(&mut self, source: T) -> Result<(ISA68000, OperandSize), ParseError>;
 }
 
 impl<T, P> Parser<Vec<T>> for P
@@ -54,7 +62,7 @@ where
     P: Interpreter<T>,
     T: Sized,
 {
-    fn parse(&mut self, source: Vec<T>) -> Result<Vec<ISA68000>, ParseError> {
+    fn parse(&mut self, source: Vec<T>) -> Result<Vec<(ISA68000, OperandSize)>, ParseError> {
         let mut instructions = Vec::new();
         for item in source {
             instructions.push(self.parse_instruction(item)?);
