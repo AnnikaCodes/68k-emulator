@@ -192,7 +192,6 @@ impl InstructionSet for ISA68000 {
 impl From<Instruction> for ISA68000 {
     fn from(instruction: Instruction) -> Self {
         let (src, dest) = AddressMode::from_m68kdecode(
-            instruction.size,
             instruction.operands[0].clone(),
             instruction.operands[1].clone(),
         )

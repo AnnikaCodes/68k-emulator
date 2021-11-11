@@ -394,10 +394,7 @@ impl AssemblyInterpreter {
 
                     let size = match source_size {
                         Some(size) => Some(size),
-                        None => match dest_size {
-                            Some(size) => Some(size),
-                            None => None,
-                        },
+                        None => dest_size.map(|size| size),
                     };
 
                     return Ok((source_mode, dest_mode, size));
@@ -838,7 +835,7 @@ mod tests {
     #[test]
     fn parse_to_operand_immediate() {
         // TODO: should this be a byte, word, or long?
-        for (operand, value, size) in [("#$400", 0x400, Long)] {
+        for (operand, value) in [("#$400", 0x400)] {
             assert_eq!(
                 AssemblyInterpreter::parse_to_operand(operand, &DUMMY_INSTRUCTION).unwrap(),
                 (AddressMode::Immediate { value }, None)

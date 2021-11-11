@@ -247,17 +247,9 @@ impl AddressMode {
     ///
     /// TODO: refactor m68kdecode to use my types natively, or use its types in this pro
     pub fn from_m68kdecode(
-        size: i32,
         source: m68kdecode::Operand,
         destination: m68kdecode::Operand,
     ) -> Result<(AddressMode, Option<AddressMode>), CPUError> {
-        let size = if size == 0 {
-            // Hack to handle 0-size for non-moving instructions like JMP coming from m68kdecode
-            OperandSize::Long
-        } else {
-            OperandSize::from_size_in_bytes(size)?
-        };
-
         Ok((
             // Should be OK to unwrap since we won't have 2 NoOperands
             AddressMode::from_m68kdecode_operand(source).unwrap(),
@@ -333,7 +325,7 @@ impl AddressMode {
                     },
                 }
             }
-            m68kdecode::Operand::PCDISP(size, disp) => {
+            m68kdecode::Operand::PCDISP(_size, disp) => {
                 // This is gross! TODO: refactor either us or m68kdecode to be better
                 match disp.indexer {
                     Indexer::AR(index_reg, offset) => {

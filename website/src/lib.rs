@@ -1,7 +1,7 @@
 use emulator::{
     cpu::{InstructionSet, CPU},
     parsers::{assembly::AssemblyInterpreter, Interpreter},
-    ram::{Memory, VecBackedMemory},
+    ram::{VecBackedMemory},
 };
 use wasm_bindgen::prelude::*;
 

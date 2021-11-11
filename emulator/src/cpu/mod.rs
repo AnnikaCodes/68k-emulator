@@ -20,8 +20,6 @@ pub mod isa_68000;
 pub mod registers;
 use registers::*;
 
-use self::addressing::AddressMode;
-
 /// Trait for all ISA enums to implement
 pub trait InstructionSet {
     fn execute(&self, cpu: &mut CPU<impl Memory>, size: OperandSize) -> Result<(), CPUError>;

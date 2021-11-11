@@ -6,7 +6,7 @@
 use std::num::{ParseIntError, TryFromIntError};
 
 use crate::{
-    cpu::{isa_68000::ISA68000, InstructionSet},
+    cpu::{isa_68000::ISA68000},
     OperandSize,
 };
 pub mod assembly;

@@ -1,11 +1,10 @@
-use std::io::Write;
+
 use std::path::PathBuf;
 
 use emulator::cpu::registers::Register;
 use emulator::ram::Memory;
 use emulator::{
-    cpu::{isa_68000::ISA68000, CPUError, InstructionSet, CPU},
-    parsers::{assembly::AssemblyInterpreter, Interpreter, ParseError},
+    cpu::{CPU},
     ram::VecBackedMemory,
 };
 use structopt::StructOpt;
