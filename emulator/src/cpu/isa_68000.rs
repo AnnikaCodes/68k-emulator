@@ -339,4 +339,116 @@ mod test {
             );
         }
     }
+
+    #[test]
+    fn exclusive_or() {
+        for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xAAAA, 0x15555, 0x1FFFF)] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let src = AddressMode::Immediate { value: a };
+            let dest = AddressMode::Absolute { address: ADDRESS };
+            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
+
+            let instruction = ISA68000::ExclusiveOr {
+                src,
+                dest: dest.clone(),
+            };
+
+            instruction.execute(cpu, OperandSize::Long).unwrap();
+            assert_eq!(
+                dest.get_value(cpu, OperandSize::Long).unwrap(),
+                M68kInteger::Long(result)
+            );
+        }
+    }
+
+    #[test]
+    fn inclusive_or() {
+        for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xAAAA, 0x15555, 0x1FFFF)] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let src = AddressMode::Immediate { value: a };
+            let dest = AddressMode::Absolute { address: ADDRESS };
+            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
+
+            let instruction = ISA68000::InclusiveOr {
+                src,
+                dest: dest.clone(),
+            };
+
+            instruction.execute(cpu, OperandSize::Long).unwrap();
+            assert_eq!(
+                dest.get_value(cpu, OperandSize::Long).unwrap(),
+                M68kInteger::Long(result)
+            );
+        }
+    }
+
+    // TODO: use a macro to simplify these tests?
+    // eg test_source_dest!(ISA68000::And, [(2, 4, 0), (0, 0, 0), (0xCD, 0xAB, 0x89)]);
+    #[test]
+    fn and() {
+        for (a, b, result) in [(2, 4, 0), (0, 0, 0), (0xCD, 0xAB, 0x89)] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let src = AddressMode::Immediate { value: a };
+            let dest = AddressMode::Absolute { address: ADDRESS };
+            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
+
+            let instruction = ISA68000::And {
+                src,
+                dest: dest.clone(),
+            };
+
+            instruction.execute(cpu, OperandSize::Long).unwrap();
+            assert_eq!(
+                dest.get_value(cpu, OperandSize::Long).unwrap(),
+                M68kInteger::Long(result)
+            );
+        }
+    }
+
+    #[test]
+    fn rotate_left() {
+        for (a, b, result) in [(2, 0b10101011, 0b10101110), (0, 0, 0), (2, 0b11101011, 0b10101111)] {
+            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+
+            let rotate_amount = AddressMode::Immediate { value: a };
+            let to_rotate = AddressMode::Absolute { address: ADDRESS };
+            to_rotate.set_value(cpu, M68kInteger::Byte(b)).unwrap();
+
+            let instruction = ISA68000::RotateLeft {
+                to_rotate: to_rotate.clone(),
+                rotate_amount,
+            };
+
+            instruction.execute(cpu, OperandSize::Byte).unwrap();
+            assert_eq!(
+                to_rotate.get_value(cpu, OperandSize::Byte).unwrap(),
+                M68kInteger::Byte(result)
+            );
+        }
+    }
+
+    #[test]
+    fn jump() {
+        let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+        let instruction = ISA68000::JumpTo {
+            address: AddressMode::Immediate { value: ADDRESS },
+        };
+
+        assert_ne!(cpu.registers.get(Register::ProgramCounter), ADDRESS);
+        instruction.execute(cpu, OperandSize::Long).unwrap();
+        assert_eq!(cpu.registers.get(Register::ProgramCounter), ADDRESS);
+    }
+
+    #[test]
+    fn no_op() {
+        let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+        let instruction = ISA68000::NoOp;
+
+        let initial_state = format!("{}", cpu);
+        instruction.execute(cpu, OperandSize::Long).unwrap();
+        assert_eq!(format!("{}", cpu), initial_state);
+    }
 }

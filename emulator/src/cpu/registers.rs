@@ -227,3 +227,29 @@ impl Display for Registers {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use AddressRegister::*;
+    use DataRegister::*;
+
+    #[test]
+    fn registers() {
+        let mut registers = Registers::new();
+
+        let address_registers = [A0, A1, A2, A3, A4, A5, A6, A7].map(|reg| Register::Address(reg));
+        let data_registers = [D0, D1, D2, D3, D4, D5, D6, D7].map(|reg| Register::Data(reg));
+        let all_registers = address_registers
+            .iter()
+            .chain(data_registers.iter())
+            .chain([Register::ProgramCounter].iter());
+
+        for (index, register) in all_registers.enumerate() {
+            let val: u32 = (index * 100 + index) as u32;
+
+            registers.set(*register, val);
+            assert_eq!(registers.get(*register), val);
+        }
+    }
+}

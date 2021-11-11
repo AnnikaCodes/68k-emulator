@@ -6,18 +6,66 @@ use crate::{cpu::CPUError, hex_format_byte, M68kInteger, OperandSize};
 
 pub trait Memory: Display {
     fn new(size_in_bytes: usize) -> Self;
-
-    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError>;
     fn read_byte(&self, address: u32) -> Result<u8, CPUError>;
-    fn read_word(&self, address: u32) -> Result<u16, CPUError>;
-    fn read_long(&self, address: u32) -> Result<u32, CPUError>;
-    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError>;
-
-    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), CPUError>;
     fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError>;
-    fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError>;
-    fn write_long(&mut self, address: u32, value: u32) -> Result<(), CPUError>;
-    fn write_bytes(&mut self, address: u32, bytes: Vec<u8>) -> Result<(), CPUError>;
+
+    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError> {
+        match size {
+            OperandSize::Byte => Ok(M68kInteger::Byte(self.read_byte(address)?)),
+            OperandSize::Word => Ok(M68kInteger::Word(self.read_word(address)?)),
+            OperandSize::Long => Ok(M68kInteger::Long(self.read_long(address)?)),
+        }
+    }
+
+    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError> {
+        let mut bytes = Vec::with_capacity(len as usize);
+        for i in 0..len {
+            bytes.push(self.read_byte(address + i)?);
+        }
+        Ok(bytes)
+    }
+
+    fn read_word(&self, address: u32) -> Result<u16, CPUError> {
+        let high_byte = self.read_byte(address)?;
+        let low_byte = self.read_byte(address + 1)?;
+        Ok(((high_byte as u16) << 8) + low_byte as u16)
+    }
+
+    fn read_long(&self, address: u32) -> Result<u32, CPUError> {
+        let high_word = self.read_word(address)?;
+        let low_word = self.read_word(address + 2)?;
+        Ok(((high_word as u32) << 16) + low_word as u32)
+    }
+
+    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), CPUError> {
+        match value {
+            M68kInteger::Byte(value) => self.write_byte(address, value),
+            M68kInteger::Word(value) => self.write_word(address, value),
+            M68kInteger::Long(value) => self.write_long(address, value),
+        }
+    }
+    fn write_bytes(&mut self, address: u32, value: Vec<u8>) -> Result<(), CPUError> {
+        for (i, byte) in value.iter().enumerate() {
+            self.write_byte(address + i as u32, *byte)?;
+        }
+        Ok(())
+    }
+
+    fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError> {
+        let low_byte = (value & 0x00FF) as u8;
+        let high_byte = (value >> 8) as u8;
+
+        self.write_byte(address, high_byte)?;
+        self.write_byte(address + 1, low_byte)
+    }
+
+    fn write_long(&mut self, address: u32, long: u32) -> Result<(), CPUError> {
+        let low_word = (long & 0x0000FFFF) as u16;
+        let high_word = (long >> 16) as u16;
+
+        self.write_word(address, high_word)?;
+        self.write_word(address + 2, low_word)
+    }
 }
 
 /// Naive Vec<u8> implementation of RAM
@@ -74,45 +122,13 @@ impl Memory for VecBackedMemory {
         }
     }
 
-    fn read(&self, address: u32, size: OperandSize) -> Result<M68kInteger, CPUError> {
-        match size {
-            OperandSize::Byte => Ok(M68kInteger::Byte(self.read_byte(address)?)),
-            OperandSize::Word => Ok(M68kInteger::Word(self.read_word(address)?)),
-            OperandSize::Long => Ok(M68kInteger::Long(self.read_long(address)?)),
-        }
-    }
     fn read_byte(&self, address: u32) -> Result<u8, CPUError> {
         match self.random_access_buf.get(address as usize) {
             Some(byte) => Ok(*byte),
             None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
         }
     }
-    fn read_bytes(&self, address: u32, len: u32) -> Result<Vec<u8>, CPUError> {
-        let mut bytes = Vec::with_capacity(len as usize);
-        for i in 0..len {
-            bytes.push(self.read_byte(address + i)?);
-        }
-        Ok(bytes)
-    }
-    fn read_word(&self, address: u32) -> Result<u16, CPUError> {
-        let high_byte = self.read_byte(address)?;
-        let low_byte = self.read_byte(address + 1)?;
-        Ok(((high_byte as u16) << 8) + low_byte as u16)
-    }
 
-    fn read_long(&self, address: u32) -> Result<u32, CPUError> {
-        let high_word = self.read_word(address)?;
-        let low_word = self.read_word(address + 2)?;
-        Ok(((high_word as u32) << 16) + low_word as u32)
-    }
-
-    fn write(&mut self, address: u32, value: M68kInteger) -> Result<(), CPUError> {
-        match value {
-            M68kInteger::Byte(value) => self.write_byte(address, value),
-            M68kInteger::Word(value) => self.write_word(address, value),
-            M68kInteger::Long(value) => self.write_long(address, value),
-        }
-    }
     fn write_byte(&mut self, address: u32, value: u8) -> Result<(), CPUError> {
         match self.random_access_buf.get_mut(address as usize) {
             Some(byte) => {
@@ -121,26 +137,6 @@ impl Memory for VecBackedMemory {
             }
             None => Err(CPUError::MemoryOutOfBoundsAccess(address)),
         }
-    }
-    fn write_bytes(&mut self, address: u32, value: Vec<u8>) -> Result<(), CPUError> {
-        for (i, byte) in value.iter().enumerate() {
-            self.write_byte(address + i as u32, *byte)?;
-        }
-        Ok(())
-    }
-    fn write_word(&mut self, address: u32, value: u16) -> Result<(), CPUError> {
-        let low_byte = (value & 0x00FF) as u8;
-        let high_byte = (value >> 8) as u8;
-
-        self.write_byte(address, high_byte)?;
-        self.write_byte(address + 1, low_byte)
-    }
-    fn write_long(&mut self, address: u32, long: u32) -> Result<(), CPUError> {
-        let low_word = (long & 0x0000FFFF) as u16;
-        let high_word = (long >> 16) as u16;
-
-        self.write_word(address, high_word)?;
-        self.write_word(address + 2, low_word)
     }
 }
 
@@ -193,6 +189,15 @@ mod tests {
             // bonus!
             assert_eq!(ram_impl.read_long(ADDRESS).unwrap(), 0x12345678);
             assert_eq!(ram_impl.read_byte(ADDRESS + 4).unwrap(), 0x9A);
+        }
+    }
+
+    #[test]
+    fn display_does_not_include_lots_of_zeroes() {
+        for ram_impl in [VecBackedMemory::new(SIZE)] {
+            let display = format!("{}", ram_impl);
+            let zeroes = display.chars().filter(|c| *c == '0').count();
+            assert!(zeroes < 10, "too many zeroes not filtered out: {}", zeroes);
         }
     }
 }
