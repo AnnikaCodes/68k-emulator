@@ -1,5 +1,5 @@
 use emulator::{
-    cpu::{InstructionSet, CPU},
+    cpu::CPU,
     parsers::{assembly::AssemblyInterpreter, Parser},
     ram::{VecBackedMemory},
 };
