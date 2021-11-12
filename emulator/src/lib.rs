@@ -1,8 +1,6 @@
 #![feature(slice_pattern)]
 //! Motorola 68k CPU emulation library.
 
-use std::ops::{Add, Sub};
-
 use parsers::ParseError;
 
 #[derive(Debug)]
@@ -91,6 +89,22 @@ impl From<M68kInteger> for u32 {
     }
 }
 
+/// Implements an operation on all three sizes of data.
+///
+/// Requires that both operands be of the same size.
+macro_rules! operation_impl {
+    ($name:ident, |$a:ident, $b:ident| $op:expr) => {
+        pub fn $name(&self, other: M68kInteger) -> M68kInteger {
+            match (self, other) {
+                (&M68kInteger::Byte($a), M68kInteger::Byte($b)) => M68kInteger::Byte($op),
+                (&M68kInteger::Word($a), M68kInteger::Word($b)) => M68kInteger::Word($op),
+                (&M68kInteger::Long($a), M68kInteger::Long($b)) => M68kInteger::Long($op),
+                _ => panic!("Mismatched operand sizes"),
+            }
+        }
+    };
+}
+
 impl M68kInteger {
     pub fn size(&self) -> OperandSize {
         match self {
@@ -112,104 +126,13 @@ impl M68kInteger {
         }
     }
 
-    pub fn wrapping_mul(self, other: M68kInteger) -> M68kInteger {
-        match (self, other) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a.wrapping_mul(b)),
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a.wrapping_mul(b)),
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.wrapping_mul(b)),
-            // TODO: this should probably not panic
-            _ => panic!(
-                "M68kInteger::wrapping_mul: invalid operands {:?} and {:?}",
-                self, other
-            ),
-        }
-    }
-
-    pub fn rotate_left(self, amount: M68kInteger) -> M68kInteger {
-        match (self, amount) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => {
-                M68kInteger::Byte(a.rotate_left(b.into()))
-            }
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => {
-                M68kInteger::Word(a.rotate_left(b.into()))
-            }
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.rotate_left(b)),
-            // TODO: this should probably not panic
-            _ => panic!(
-                "M68kInteger::rotate_left: invalid operands {:?} and {:?}",
-                self, amount
-            ),
-        }
-    }
-
-    // TODO: make these into macros?
-    pub fn or(self, other: M68kInteger) -> M68kInteger {
-        match (self, other) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a | b),
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a | b),
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a | b),
-            _ => panic!(
-                "M68kInteger::or: invalid operands {:?} and {:?}",
-                self, other
-            ),
-        }
-    }
-
-    pub fn and(self, other: M68kInteger) -> M68kInteger {
-        match (self, other) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a & b),
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a & b),
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a & b),
-            _ => panic!(
-                "M68kInteger::and: invalid operands {:?} and {:?}",
-                self, other
-            ),
-        }
-    }
-
-    pub fn xor(self, other: M68kInteger) -> M68kInteger {
-        match (self, other) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a ^ b),
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a ^ b),
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a ^ b),
-            _ => panic!(
-                "M68kInteger::and: invalid operands {:?} and {:?}",
-                self, other
-            ),
-        }
-    }
-}
-
-impl Add for M68kInteger {
-    type Output = M68kInteger;
-
-    fn add(self, other: M68kInteger) -> M68kInteger {
-        match (self, other) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a.wrapping_add(b)),
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a.wrapping_add(b)),
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.wrapping_add(b)),
-            _ => panic!(
-                "M68kInteger::add: invalid operands {:?} and {:?}",
-                self, other
-            ),
-        }
-    }
-}
-
-impl Sub for M68kInteger {
-    type Output = M68kInteger;
-
-    fn sub(self, other: M68kInteger) -> M68kInteger {
-        match (self, other) {
-            (M68kInteger::Byte(a), M68kInteger::Byte(b)) => M68kInteger::Byte(a.wrapping_sub(b)),
-            (M68kInteger::Word(a), M68kInteger::Word(b)) => M68kInteger::Word(a.wrapping_sub(b)),
-            (M68kInteger::Long(a), M68kInteger::Long(b)) => M68kInteger::Long(a.wrapping_sub(b)),
-            _ => panic!(
-                "M68kInteger::sub: invalid operands {:?} and {:?}",
-                self, other
-            ),
-        }
-    }
+    operation_impl!(wrapping_add, |a, b| a.wrapping_add(b));
+    operation_impl!(wrapping_sub, |a, b| a.wrapping_sub(b));
+    operation_impl!(wrapping_mul, |a, b| a.wrapping_mul(b));
+    operation_impl!(rotate_left, |a, b| a.rotate_left(b.into()));
+    operation_impl!(and, |a, b| a & b);
+    operation_impl!(or, |a, b| a | b);
+    operation_impl!(xor, |a, b| a ^ b);
 }
 
 pub fn hex_format_byte(byte: u8) -> String {

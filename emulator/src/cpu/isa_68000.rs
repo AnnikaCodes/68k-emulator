@@ -141,11 +141,15 @@ impl Instruction {
     ) -> Result<(), EmulationError> {
         match self {
             Instruction::Add { src, dest } => {
-                let val = src.get_value(cpu, size)? + dest.get_value(cpu, size)?;
+                let val = src
+                    .get_value(cpu, size)?
+                    .wrapping_add(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
             Instruction::Subtract { src, dest } => {
-                let val = src.get_value(cpu, size)? - dest.get_value(cpu, size)?;
+                let val = src
+                    .get_value(cpu, size)?
+                    .wrapping_sub(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
             Instruction::MultiplyUnsigned { src, dest } => {
@@ -200,156 +204,39 @@ mod test {
     static ADDRESS: u32 = 0x40;
     static VALUE: u32 = 0xDEADBEEF;
 
-    #[test]
-    fn move_instruction() {
-        let mut cpu = CPU::<VecBackedMemory>::new(1024);
-        let dest = AddressMode::Absolute { address: ADDRESS };
-        let src = AddressMode::Immediate { value: VALUE };
-        let instruction = Instruction::Move { src, dest };
+    /// Genernates a unit test with the given test cases for an instruction that uses the src/dest format
+    macro_rules! test_instruction {
+        ($function_name:ident, $variant:ident, $( ($src:expr, $dest:expr) => $result:expr ),*) => {
+            #[test]
+            fn $function_name() {
+                for (a, b, result) in [$( ($src, $dest, $result) ),*].iter() {
+                    let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
-        instruction.execute(&mut cpu, OperandSize::Long).unwrap();
-        assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);
-    }
+                    let src = AddressMode::Immediate { value: *a };
+                    let dest = AddressMode::Absolute { address: ADDRESS };
+                    dest.set_value(cpu, M68kInteger::Long(*b)).unwrap();
 
-    #[test]
-    fn add_instruction() {
-        for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xFFFFFFFF, 1, 0x00000000u32)] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
+                    let instruction = Instruction::$variant {
+                        src,
+                        dest: dest.clone(),
+                    };
 
-            let src = AddressMode::Immediate { value: a };
-            let dest = AddressMode::Absolute { address: ADDRESS };
-            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
-
-            let instruction = Instruction::Add {
-                src,
-                dest: dest.clone(),
-            };
-
-            instruction.execute(cpu, OperandSize::Long).unwrap();
-            assert_eq!(
-                dest.get_value(cpu, OperandSize::Long).unwrap(),
-                M68kInteger::Long(result)
-            );
+                    instruction.execute(cpu, OperandSize::Long).unwrap();
+                    assert_eq!(
+                        dest.get_value(cpu, OperandSize::Long).unwrap(),
+                        M68kInteger::Long(*result)
+                    );
+                }
+            }
         }
     }
 
-    #[test]
-    fn subtract_instruction() {
-        // 0x1 - 0x2 = 0xFFFFFFFF because of wrapping... as an i32 it would work.
-        for (a, b, result) in [(1, 2, 0xFFFFFFFF), (0, 0, 0), (20, 10, 10)] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
-
-            let src = AddressMode::Immediate { value: a };
-            let dest = AddressMode::Absolute { address: ADDRESS };
-            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
-
-            let instruction = Instruction::Subtract {
-                src,
-                dest: dest.clone(),
-            };
-
-            instruction.execute(cpu, OperandSize::Long).unwrap();
-            assert_eq!(
-                dest.get_value(cpu, OperandSize::Long).unwrap(),
-                M68kInteger::Long(result)
-            );
-        }
-    }
-
-    #[test]
-    fn multiply_unsigned_instruction() {
-        for (a, b, result) in [
-            (1u32, 2u32, 2u32),
-            (0, 0, 0),
-            (20, 10, 200),
-            (0x80000000, 2, 0),
-        ] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
-
-            let src = AddressMode::Immediate { value: a };
-            let dest = AddressMode::Absolute { address: ADDRESS };
-            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
-
-            let instruction = Instruction::MultiplyUnsigned {
-                src,
-                dest: dest.clone(),
-            };
-
-            instruction.execute(cpu, OperandSize::Long).unwrap();
-            assert_eq!(
-                dest.get_value(cpu, OperandSize::Long).unwrap(),
-                M68kInteger::Long(result)
-            );
-        }
-    }
-
-    #[test]
-    fn exclusive_or() {
-        for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xAAAA, 0x15555, 0x1FFFF)] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
-
-            let src = AddressMode::Immediate { value: a };
-            let dest = AddressMode::Absolute { address: ADDRESS };
-            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
-
-            let instruction = Instruction::ExclusiveOr {
-                src,
-                dest: dest.clone(),
-            };
-
-            instruction.execute(cpu, OperandSize::Long).unwrap();
-            assert_eq!(
-                dest.get_value(cpu, OperandSize::Long).unwrap(),
-                M68kInteger::Long(result)
-            );
-        }
-    }
-
-    #[test]
-    fn inclusive_or() {
-        for (a, b, result) in [(1, 2, 3), (0, 0, 0), (0xAAAA, 0x15555, 0x1FFFF)] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
-
-            let src = AddressMode::Immediate { value: a };
-            let dest = AddressMode::Absolute { address: ADDRESS };
-            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
-
-            let instruction = Instruction::InclusiveOr {
-                src,
-                dest: dest.clone(),
-            };
-
-            instruction.execute(cpu, OperandSize::Long).unwrap();
-            assert_eq!(
-                dest.get_value(cpu, OperandSize::Long).unwrap(),
-                M68kInteger::Long(result)
-            );
-        }
-    }
-
-    // TODO: use a macro to simplify these tests?
-    // eg test_source_dest!(Instruction::And, [(2, 4, 0), (0, 0, 0), (0xCD, 0xAB, 0x89)]);
-    #[test]
-    fn and() {
-        for (a, b, result) in [(2, 4, 0), (0, 0, 0), (0xCD, 0xAB, 0x89)] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
-
-            let src = AddressMode::Immediate { value: a };
-            let dest = AddressMode::Absolute { address: ADDRESS };
-            dest.set_value(cpu, M68kInteger::Long(b)).unwrap();
-
-            let instruction = Instruction::And {
-                src,
-                dest: dest.clone(),
-            };
-
-            instruction.execute(cpu, OperandSize::Long).unwrap();
-            assert_eq!(
-                dest.get_value(cpu, OperandSize::Long).unwrap(),
-                M68kInteger::Long(result)
-            );
-        }
-    }
+    test_instruction!(add, Add, (1, 2) => 3, (0, 0) => 0, (0xFFFFFFFF, 1) => 0x00000000);
+    test_instruction!(subtract, Subtract, (1, 2) => 0xFFFFFFFF, (0, 0) => 0, (20, 10) => 10);
+    test_instruction!(multiply_unsigned, MultiplyUnsigned, (1, 2) => 2, (0, 0) => 0, (20, 10) => 200, (0x80000000, 2) => 0);
+    test_instruction!(xor, ExclusiveOr, (1, 2) => 3, (0, 0) => 0, (7, 3) => 4, (0xAAAA, 0x15555) => 0x1FFFF);
+    test_instruction!(or, InclusiveOr, (1, 2) => 3, (0, 0) => 0, (7, 3) => 7);
+    test_instruction!(and, And, (2, 4) => 0, (0, 0) => 0, (0xCD, 0xAB) => 0x89);
 
     #[test]
     fn rotate_left() {
@@ -387,6 +274,17 @@ mod test {
         assert_ne!(cpu.registers.get(Register::ProgramCounter), ADDRESS);
         instruction.execute(cpu, OperandSize::Long).unwrap();
         assert_eq!(cpu.registers.get(Register::ProgramCounter), ADDRESS);
+    }
+
+    #[test]
+    fn move_instruction() {
+        let mut cpu = CPU::<VecBackedMemory>::new(1024);
+        let dest = AddressMode::Absolute { address: ADDRESS };
+        let src = AddressMode::Immediate { value: VALUE };
+        let instruction = Instruction::Move { src, dest };
+
+        instruction.execute(&mut cpu, OperandSize::Long).unwrap();
+        assert_eq!(cpu.memory.read_long(ADDRESS).unwrap(), VALUE);
     }
 
     #[test]
