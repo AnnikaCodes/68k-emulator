@@ -170,6 +170,7 @@ impl Instruction {
                 let val = src.get_value(cpu, size)?.or(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
             }
+            // Could use a cleaner API like `src.modify(cpu, size, |val| val.and(dest.get_value(cpu, size)?))`
             Instruction::And { src, dest } => {
                 let val = src.get_value(cpu, size)?.and(dest.get_value(cpu, size)?);
                 dest.set_value(cpu, val)
@@ -206,29 +207,35 @@ mod test {
 
     /// Genernates a unit test with the given test cases for an instruction that uses the src/dest format
     macro_rules! test_instruction {
-        ($function_name:ident, $variant:ident, $( ($src:expr, $dest:expr) => $result:expr ),*) => {
+        ($( #[$meta:meta], )? $function_name:ident, $variant:ident, $op1:ident, $op2:ident, $size:ident, $( ($src:expr, $dest:expr) => $result:expr ),*) => {
             #[test]
+            $( #[$meta] )?
             fn $function_name() {
                 for (a, b, result) in [$( ($src, $dest, $result) ),*].iter() {
                     let cpu = &mut CPU::<VecBackedMemory>::new(1024);
 
                     let src = AddressMode::Immediate { value: *a };
                     let dest = AddressMode::Absolute { address: ADDRESS };
-                    dest.set_value(cpu, M68kInteger::Long(*b)).unwrap();
+                    dest.set_value(cpu, M68kInteger::$size(*b)).unwrap();
 
                     let instruction = Instruction::$variant {
-                        src,
-                        dest: dest.clone(),
+                        $op1: src,
+                        $op2: dest.clone(),
                     };
 
-                    instruction.execute(cpu, OperandSize::Long).unwrap();
+                    instruction.execute(cpu, OperandSize::$size).unwrap();
                     assert_eq!(
-                        dest.get_value(cpu, OperandSize::Long).unwrap(),
-                        M68kInteger::Long(*result)
+                        dest.get_value(cpu, OperandSize::$size).unwrap(),
+                        M68kInteger::$size(*result)
                     );
                 }
             }
-        }
+        };
+
+        // Default to src/dest/long
+        ($( #[$meta:meta], )? $function_name:ident, $variant:ident, $( ($src:expr, $dest:expr) => $result:expr ),*) => {
+            test_instruction! { $( #[$meta], )? $function_name, $variant, src, dest, Long, $( ($src, $dest) => $result ),* }
+        };
     }
 
     test_instruction!(add, Add, (1, 2) => 3, (0, 0) => 0, (0xFFFFFFFF, 1) => 0x00000000);
@@ -237,32 +244,7 @@ mod test {
     test_instruction!(xor, ExclusiveOr, (1, 2) => 3, (0, 0) => 0, (7, 3) => 4, (0xAAAA, 0x15555) => 0x1FFFF);
     test_instruction!(or, InclusiveOr, (1, 2) => 3, (0, 0) => 0, (7, 3) => 7);
     test_instruction!(and, And, (2, 4) => 0, (0, 0) => 0, (0xCD, 0xAB) => 0x89);
-
-    #[test]
-    fn rotate_left() {
-        for (a, b, result) in [
-            (2, 0b10101011, 0b10101110),
-            (0, 0, 0),
-            (2, 0b11101011, 0b10101111),
-        ] {
-            let cpu = &mut CPU::<VecBackedMemory>::new(1024);
-
-            let rotate_amount = AddressMode::Immediate { value: a };
-            let to_rotate = AddressMode::Absolute { address: ADDRESS };
-            to_rotate.set_value(cpu, M68kInteger::Byte(b)).unwrap();
-
-            let instruction = Instruction::RotateLeft {
-                to_rotate: to_rotate.clone(),
-                rotate_amount,
-            };
-
-            instruction.execute(cpu, OperandSize::Byte).unwrap();
-            assert_eq!(
-                to_rotate.get_value(cpu, OperandSize::Byte).unwrap(),
-                M68kInteger::Byte(result)
-            );
-        }
-    }
+    test_instruction!(rotate_left, RotateLeft, rotate_amount, to_rotate, Byte, (2, 0b10101011) => 0b10101110, (0, 0) => 0, (2, 0b11101011) => 0b10101111);
 
     #[test]
     fn jump() {
