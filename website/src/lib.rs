@@ -20,7 +20,7 @@ impl REPLBackend {
 
     pub fn interpret_assembly(&mut self, assembly: String) -> String {
         match self.interpreter.parse(assembly.clone()) {
-            Ok((instruction, size)) => {
+            Ok((instruction, size, _)) => {
                 if let Err(e) = instruction.execute(&mut self.cpu, size) {
                     format!("Error: {:?}\n{}", e, self.cpu)
                 } else {

@@ -408,7 +408,7 @@ impl AssemblyInterpreter {
 }
 
 impl Parser<String> for AssemblyInterpreter {
-    fn parse(&mut self, source: String) -> Result<(Instruction, OperandSize), ParseError> {
+    fn parse(&mut self, source: String) -> Result<(Instruction, OperandSize, u32), ParseError> {
         let lowercase_source = source.to_lowercase();
         let (instruction_token, rest) = match lowercase_source.trim().split_once(' ') {
             Some(s) => s,
@@ -416,22 +416,22 @@ impl Parser<String> for AssemblyInterpreter {
         };
         let (src, dest, size) = Self::parse_source_dest(rest, source)?;
         let size = size.unwrap_or(OperandSize::Long);
-
         match instruction_token {
-            "add" => Ok((Instruction::Add { src, dest }, size)),
-            "sub" => Ok((Instruction::Subtract { src, dest }, size)),
-            "mulu" => Ok((Instruction::MultiplyUnsigned { src, dest }, size)),
-            "move" => Ok((Instruction::Move { src, dest }, size)),
+            "add" => Ok((Instruction::Add { src, dest }, size, 0)),
+            "sub" => Ok((Instruction::Subtract { src, dest }, size, 0)),
+            "mulu" => Ok((Instruction::MultiplyUnsigned { src, dest }, size, 0)),
+            "move" => Ok((Instruction::Move { src, dest }, size, 0)),
             "roxl" => Ok((
                 Instruction::RotateLeft {
                     to_rotate: src,
                     rotate_amount: dest,
                 },
                 size,
+                0,
             )),
-            "eor" => Ok((Instruction::ExclusiveOr { src, dest }, size)),
-            "or" => Ok((Instruction::InclusiveOr { src, dest }, size)),
-            "nop" => Ok((Instruction::NoOp, size)),
+            "eor" => Ok((Instruction::ExclusiveOr { src, dest }, size, 0)),
+            "or" => Ok((Instruction::InclusiveOr { src, dest }, size, 0)),
+            "nop" => Ok((Instruction::NoOp, size, 0)),
             _ => Err(ParseError::UnknownInstruction(
                 instruction_token.to_string(),
             )),

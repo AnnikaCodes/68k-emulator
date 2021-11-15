@@ -244,20 +244,35 @@ fn set_address_ram_pre_indexed(
 impl AddressMode {
     /// Converts an m68kdecode instruction to a (src, dest) pair of AddressModes
     ///
-    /// TODO: refactor m68kdecode to use my types natively, or use its types in this pro
+    /// TODO: refactor m68kdecode to use my types natively, or use its types in this program.
+    ///
+    /// the third tuple element is an optional size override
     pub fn from_m68kdecode(
         source: m68kdecode::Operand,
         destination: m68kdecode::Operand,
-    ) -> Result<(AddressMode, Option<AddressMode>), EmulationError> {
-        Ok((
-            // Should be OK to unwrap since we won't have 2 NoOperands
-            AddressMode::from_m68kdecode_operand(source).unwrap(),
-            AddressMode::from_m68kdecode_operand(destination),
-        ))
+    ) -> Result<(AddressMode, Option<AddressMode>, Option<OperandSize>), EmulationError> {
+        let (src, src_size_override) = AddressMode::from_m68kdecode_operand(source);
+        let (dest, dest_size_override) = AddressMode::from_m68kdecode_operand(destination);
+
+        let size_override = match src_size_override {
+            Some(size) => {
+                if let Some(dest_size) = dest_size_override {
+                    if dest_size != size {
+                        return Err(EmulationError::SizeMismatch);
+                    }
+                }
+                Some(size)
+            }
+            None => dest_size_override,
+        };
+
+        // Should be OK to unwrap since we won't have 2 NoOperands
+        Ok((src.unwrap(), dest, size_override))
     }
 
-    fn from_m68kdecode_operand(op: m68kdecode::Operand) -> Option<AddressMode> {
-        match op {
+    fn from_m68kdecode_operand(op: m68kdecode::Operand) -> (Option<AddressMode>, Option<OperandSize>) {
+        let mut size_override = None;
+        let op = match op {
             m68kdecode::Operand::IMM8(value) => Some(AddressMode::Immediate {
                 value: value.into(),
             }),
@@ -324,8 +339,9 @@ impl AddressMode {
                     },
                 }
             }
-            m68kdecode::Operand::PCDISP(_size, disp) => {
+            m68kdecode::Operand::PCDISP(size, disp) => {
                 // This is gross! TODO: refactor either us or m68kdecode to be better
+                size_override = Some(OperandSize::from_size_in_bytes(size.into()).expect("bad size override"));
                 match disp.indexer {
                     Indexer::AR(index_reg, offset) => {
                         // TODO: set `size` to be size
@@ -364,8 +380,15 @@ impl AddressMode {
             }
             m68kdecode::Operand::NoOperand => None,
 
-            _ => unimplemented!("converting m68kdecode operand {:?} to AddressMode", op),
-        }
+            _ => {
+                eprintln!("Unimplemented: converting m68kdecode operand {:?} to AddressMode; defaulting to Register Indirect of A1", op);
+                Some(AddressMode::RegisterIndirect {
+                    register: AddressRegister::A1,
+                })
+            },
+        };
+
+        (op, size_override)
     }
 
     fn from_m68kdecode_with_register_indexing(

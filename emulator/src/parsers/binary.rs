@@ -12,16 +12,31 @@ use m68kdecode::Operation;
 pub struct MachineCodeParser;
 
 impl Parser<Vec<u8>> for MachineCodeParser {
-    fn parse(&mut self, source: Vec<u8>) -> Result<(Instruction, OperandSize), ParseError> {
+    fn parse(&mut self, source: Vec<u8>) -> Result<(Instruction, OperandSize, u32), ParseError> {
         let decoded = m68kdecode::decode_instruction(source.as_slice())?;
-        let (src, dest) = AddressMode::from_m68kdecode(
+        dbg!(&decoded);
+        let (src, dest, size_override) = AddressMode::from_m68kdecode(
             decoded.instruction.operands[0].clone(),
             decoded.instruction.operands[1].clone(),
         )
         .unwrap();
 
+        let size = if decoded.instruction.size == 0 {
+            size_override.expect("Should have a size override when instruction size is 0")
+        } else {
+            match OperandSize::from_size_in_bytes(decoded.instruction.size) {
+                Ok(s) => s,
+                Err(e) => match e {
+                    EmulationError::InvalidOperandSize(s) => {
+                        return Err(ParseError::InvalidOperandSize(s))
+                    }
+                    _ => panic!("Unexpected error while parsing operand size: {:?}", e),
+                },
+            }
+        };
+
         let parsed = match decoded.instruction.operation {
-            Operation::ADD | Operation::ADDI | Operation::ADDA => Instruction::Add {
+            Operation::ADD | Operation::ADDI | Operation::ADDA | Operation::ADDQ => Instruction::Add {
                 src,
                 dest: dest.unwrap(),
             },
@@ -33,7 +48,9 @@ impl Parser<Vec<u8>> for MachineCodeParser {
                 src,
                 dest: dest.unwrap(),
             },
-            Operation::MOVE => Instruction::Move {
+            // TODO: should movea alter the address mode to be indirect?
+            // TODO: implement movem
+            Operation::MOVE | Operation::MOVEA | Operation::MOVEM => Instruction::Move {
                 src,
                 dest: dest.unwrap(),
             },
@@ -55,6 +72,7 @@ impl Parser<Vec<u8>> for MachineCodeParser {
                 rotate_amount: src,
             },
             Operation::JMP => Instruction::JumpTo { address: src },
+            Operation::CHK => Instruction::BoundsCheck { value: dest.unwrap(), bound: src },
             Operation::NOP => Instruction::NoOp,
             _ => {
                 eprintln!(
@@ -67,16 +85,6 @@ impl Parser<Vec<u8>> for MachineCodeParser {
             }
         };
 
-        let size = match OperandSize::from_size_in_bytes(decoded.instruction.size) {
-            Ok(s) => s,
-            Err(e) => match e {
-                EmulationError::InvalidOperandSize(s) => {
-                    return Err(ParseError::InvalidOperandSize(s))
-                }
-                _ => panic!("Unexpected error while parsing operand size: {:?}", e),
-            },
-        };
-
-        Ok((parsed, size))
+        Ok((parsed, size, decoded.bytes_used))
     }
 }

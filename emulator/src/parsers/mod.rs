@@ -54,5 +54,6 @@ impl From<m68kdecode::DecodingError> for ParseError {
 
 /// A parser
 pub trait Parser<T> {
-    fn parse(&mut self, source: T) -> Result<(Instruction, OperandSize), ParseError>;
+    /// u8 is the number of bytes used for the opcode
+    fn parse(&mut self, source: T) -> Result<(Instruction, OperandSize, u32), ParseError>;
 }

@@ -54,14 +54,21 @@ where
     pub fn run_one_cycle(&mut self) -> Result<(), EmulationError> {
         // Fetch
         let pc = self.registers.get(Register::ProgramCounter);
+
         let binary = self.memory.read_bytes(pc, 8)?;
 
         // Decode
-        let (instruction, size) = self.parser.parse(binary)?;
+        let (instruction, size, bytes_taken) = self.parser.parse(binary)?;
 
         // Execute
         println!("{}: {:?}", "Execute".green().bold(), instruction);
-        instruction.execute(self, size)
+        instruction.execute(self, size)?;
+
+        // Increment PC only if the instruction didn't alter it itself
+        if pc == self.registers.get(Register::ProgramCounter) {
+            self.registers.set(Register::ProgramCounter, pc + bytes_taken as u32);
+        }
+        Ok(())
     }
 }
 

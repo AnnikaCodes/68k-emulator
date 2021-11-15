@@ -10,6 +10,7 @@ pub enum EmulationError {
     WrongSizeInteger(M68kInteger),
     InvalidOperandSize(i32),
     Parsing(ParseError),
+    SizeMismatch,
 }
 impl From<ParseError> for EmulationError {
     fn from(err: ParseError) -> Self {

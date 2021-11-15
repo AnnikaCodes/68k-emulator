@@ -123,12 +123,20 @@ pub enum Instruction {
         src: AddressMode,
         dest: AddressMode,
     },
+    AddBCD {
+        src: AddressMode,
+        dest: AddressMode,
+    },
     RotateLeft {
         to_rotate: AddressMode,
         rotate_amount: AddressMode,
     },
     JumpTo {
         address: AddressMode,
+    },
+    BoundsCheck {
+        bound: AddressMode,
+        value: AddressMode,
     },
     NoOp,
 }
@@ -185,11 +193,26 @@ impl Instruction {
                 to_rotate.set_value(cpu, val)
             }
             Instruction::JumpTo { address } => {
-                let val = address.get_value(cpu, size)?;
+                let val = address.get_value(cpu, OperandSize::Long)?;
+                let int: u32 = val.into();
+                eprintln!("Jumping to {:X} (current PC value: {:?})", int, cpu.registers.get(Register::ProgramCounter));
                 cpu.registers.set(Register::ProgramCounter, val);
                 Ok(())
             }
+            Instruction::BoundsCheck { bound, value } => {
+                let val: u32 = value.get_value(cpu, size)?.into();
+                let val = val as i32;
+                let bound: u32 = bound.get_value(cpu, size)?.into();
+
+                if val > bound as i32 || val < 0 {
+                    todo!("exception handling")
+                } else {
+                    Ok(())
+                }
+            }
             Instruction::NoOp => Ok(()),
+
+            _ => unimplemented!("instruction {:?}", self),
         }
     }
 }
@@ -238,6 +261,7 @@ mod test {
         };
     }
 
+    // TODO: figure out about setting the status register
     test_instruction!(add, Add, (1, 2) => 3, (0, 0) => 0, (0xFFFFFFFF, 1) => 0x00000000);
     test_instruction!(subtract, Subtract, (1, 2) => 0xFFFFFFFF, (0, 0) => 0, (20, 10) => 10);
     test_instruction!(multiply_unsigned, MultiplyUnsigned, (1, 2) => 2, (0, 0) => 0, (20, 10) => 200, (0x80000000, 2) => 0);
@@ -245,6 +269,21 @@ mod test {
     test_instruction!(or, InclusiveOr, (1, 2) => 3, (0, 0) => 0, (7, 3) => 7);
     test_instruction!(and, And, (2, 4) => 0, (0, 0) => 0, (0xCD, 0xAB) => 0x89);
     test_instruction!(rotate_left, RotateLeft, rotate_amount, to_rotate, Byte, (2, 0b10101011) => 0b10101110, (0, 0) => 0, (2, 0b11101011) => 0b10101111);
+    // I don't really know how BCD works, and it seems like there are multiple ways to represent numbers :S
+    // Let's hope a real 68k uses the same representation as is documented on Wikipedia!
+    // https://en.wikipedia.org/wiki/Binary-coded_decimal#Background
+    // The Macintosh ROMs seem to use BCD instructions, too, so this actually will need to be correct eventually.
+    // Also, TODO: understand the "extend bit" mentioned at http://wpage.unina.it/rcanonic/didattica/ce1/docs/68000.pdf
+    test_instruction!(
+        #[ignore],
+        abcd, AddBCD,
+        // 2 + 2 = 4
+        (0b0010, 0b0010) => 0b0100,
+        // 13 + 21 = 34
+        (0b0011_0001, 0b0001_0010) => 0b0011_0100,
+        // 13 + 9 = 22
+        (0b0011_0001, 0b1001) => 0b0010_0010
+    );
 
     #[test]
     fn jump() {
