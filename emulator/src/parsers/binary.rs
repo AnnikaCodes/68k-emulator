@@ -14,7 +14,6 @@ pub struct MachineCodeParser;
 impl Parser<Vec<u8>> for MachineCodeParser {
     fn parse(&mut self, source: Vec<u8>) -> Result<(Instruction, OperandSize, u32), ParseError> {
         let decoded = m68kdecode::decode_instruction(source.as_slice())?;
-        dbg!(&decoded);
         let (src, dest, size_override) = AddressMode::from_m68kdecode(
             decoded.instruction.operands[0].clone(),
             decoded.instruction.operands[1].clone(),
@@ -22,7 +21,12 @@ impl Parser<Vec<u8>> for MachineCodeParser {
         .unwrap();
 
         let size = if decoded.instruction.size == 0 {
-            size_override.expect("Should have a size override when instruction size is 0")
+            size_override.unwrap_or_else(|| {
+                eprintln!(
+                    "Warning: no size override and instruction size is 0. Defaulting to Long."
+                );
+                OperandSize::Long
+            })
         } else {
             match OperandSize::from_size_in_bytes(decoded.instruction.size) {
                 Ok(s) => s,
@@ -36,43 +40,51 @@ impl Parser<Vec<u8>> for MachineCodeParser {
         };
 
         let parsed = match decoded.instruction.operation {
-            Operation::ADD | Operation::ADDI | Operation::ADDA | Operation::ADDQ => Instruction::Add {
-                src,
-                dest: dest.unwrap(),
-            },
+            Operation::ADD | Operation::ADDI | Operation::ADDA | Operation::ADDQ => {
+                Instruction::Add {
+                    src: src.unwrap(),
+                    dest: dest.unwrap(),
+                }
+            }
             Operation::SUB | Operation::SUBI | Operation::SUBA => Instruction::Subtract {
-                src,
+                src: src.unwrap(),
                 dest: dest.unwrap(),
             },
             Operation::MULU => Instruction::MultiplyUnsigned {
-                src,
+                src: src.unwrap(),
                 dest: dest.unwrap(),
             },
             // TODO: should movea alter the address mode to be indirect?
-            // TODO: implement movem
+            // TODO: support reading from multiple registers to a pre/postdecrement register
+            // Necessary for things like `movem %a5/%a6, (%sp)-` which is used in Macintosh ROM calling conventions
             Operation::MOVE | Operation::MOVEA | Operation::MOVEM => Instruction::Move {
-                src,
+                src: src.unwrap(),
                 dest: dest.unwrap(),
             },
             Operation::EOR | Operation::EORI => Instruction::ExclusiveOr {
-                src,
+                src: src.unwrap(),
                 dest: dest.unwrap(),
             },
             Operation::OR | Operation::ORI => Instruction::InclusiveOr {
-                src,
+                src: src.unwrap(),
                 dest: dest.unwrap(),
             },
             Operation::AND | Operation::ANDI => Instruction::And {
-                src,
+                src: src.unwrap(),
                 dest: dest.unwrap(),
             },
             // TODO: figure out what ROL means and how it is different from ROXL
             Operation::ROXL | Operation::ROL => Instruction::RotateLeft {
                 to_rotate: dest.unwrap(),
-                rotate_amount: src,
+                rotate_amount: src.unwrap(),
             },
-            Operation::JMP => Instruction::JumpTo { address: src },
-            Operation::CHK => Instruction::BoundsCheck { value: dest.unwrap(), bound: src },
+            Operation::JMP => Instruction::JumpTo {
+                address: src.unwrap(),
+            },
+            Operation::CHK => Instruction::BoundsCheck {
+                value: dest.unwrap(),
+                bound: src.unwrap(),
+            },
             Operation::NOP => Instruction::NoOp,
             _ => {
                 eprintln!(

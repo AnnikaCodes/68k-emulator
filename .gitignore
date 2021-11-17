@@ -3,3 +3,4 @@
 /emulator/Cargo.lock
 /run68/target
 /website/target
+*.rom

@@ -11,6 +11,7 @@ pub enum EmulationError {
     InvalidOperandSize(i32),
     Parsing(ParseError),
     SizeMismatch,
+    ReadMultipleRegisters,
 }
 impl From<ParseError> for EmulationError {
     fn from(err: ParseError) -> Self {

@@ -35,6 +35,9 @@ pub enum AddressMode {
     RegisterDirect {
         register: Register,
     },
+    RegisterDirectList {
+        registers: Vec<Register>,
+    },
     RegisterIndirect {
         register: AddressRegister,
     },
@@ -250,7 +253,14 @@ impl AddressMode {
     pub fn from_m68kdecode(
         source: m68kdecode::Operand,
         destination: m68kdecode::Operand,
-    ) -> Result<(AddressMode, Option<AddressMode>, Option<OperandSize>), EmulationError> {
+    ) -> Result<
+        (
+            Option<AddressMode>,
+            Option<AddressMode>,
+            Option<OperandSize>,
+        ),
+        EmulationError,
+    > {
         let (src, src_size_override) = AddressMode::from_m68kdecode_operand(source);
         let (dest, dest_size_override) = AddressMode::from_m68kdecode_operand(destination);
 
@@ -266,11 +276,14 @@ impl AddressMode {
             None => dest_size_override,
         };
 
-        // Should be OK to unwrap since we won't have 2 NoOperands
-        Ok((src.unwrap(), dest, size_override))
+        // ~~Should be OK to unwrap since we won't have 2 NoOperands~~
+        // LOL `rts` and other returning instructions say hi!
+        Ok((src, dest, size_override))
     }
 
-    fn from_m68kdecode_operand(op: m68kdecode::Operand) -> (Option<AddressMode>, Option<OperandSize>) {
+    fn from_m68kdecode_operand(
+        op: m68kdecode::Operand,
+    ) -> (Option<AddressMode>, Option<OperandSize>) {
         let mut size_override = None;
         let op = match op {
             m68kdecode::Operand::IMM8(value) => Some(AddressMode::Immediate {
@@ -341,7 +354,8 @@ impl AddressMode {
             }
             m68kdecode::Operand::PCDISP(size, disp) => {
                 // This is gross! TODO: refactor either us or m68kdecode to be better
-                size_override = Some(OperandSize::from_size_in_bytes(size.into()).expect("bad size override"));
+                size_override =
+                    Some(OperandSize::from_size_in_bytes(size.into()).expect("bad size override"));
                 match disp.indexer {
                     Indexer::AR(index_reg, offset) => {
                         // TODO: set `size` to be size
@@ -379,16 +393,64 @@ impl AddressMode {
                 }
             }
             m68kdecode::Operand::NoOperand => None,
+            m68kdecode::Operand::REGLIST(regs) => Some(AddressMode::RegisterDirectList {
+                registers: Self::from_m68kdecode_register_bitmask(regs),
+            }),
 
-            _ => {
-                eprintln!("Unimplemented: converting m68kdecode operand {:?} to AddressMode; defaulting to Register Indirect of A1", op);
-                Some(AddressMode::RegisterIndirect {
-                    register: AddressRegister::A1,
-                })
-            },
+            _ => unimplemented!("converting m68kdecode operand {:?} to AddressMode", op),
         };
 
         (op, size_override)
+    }
+
+    fn from_m68kdecode_register_bitmask(mask: u16) -> Vec<Register> {
+        // m68kdecode gives us an undocumented bitmask!
+        // I compiled a bunch of test cases (with gcc) to figure out how it works.
+        //
+        // A cool TODO: for the future would be to write a framework/macro to integrate unit tests with `gcc`.
+        // For example: ```rs
+        // gcc_test_asm("movem (%a7), %a2/%a5/%d1", |instruction: Instruction| {
+        //     assert_eq!(instruction.dest, AddressMode::RegisterDirectList {
+        //         registers: vec![Register::Address(A2), Register::Address(A5), Register::Data(D1)]
+        //     });
+        // });
+        // ```
+
+        // Here are the test cases:
+        // %d0/%d1 => 0b0000_0000_0000_0011
+        // %d0/%d1/%d2/%d3/%d4/%d5/%d6 => 0b0000_0000_0111_1111
+        // %d0-%d7 => 0b0000_0000_1111_1111
+
+        // %a0-%a7 => 0b1111_1111_0000_0000
+        // %a2/%a5/%d1 => 0b0010_0100_0000_0010
+        let all_registers = [
+            Register::Data(DataRegister::D0),
+            Register::Data(DataRegister::D1),
+            Register::Data(DataRegister::D2),
+            Register::Data(DataRegister::D3),
+            Register::Data(DataRegister::D4),
+            Register::Data(DataRegister::D5),
+            Register::Data(DataRegister::D6),
+            Register::Data(DataRegister::D7),
+            Register::Address(AddressRegister::A0),
+            Register::Address(AddressRegister::A1),
+            Register::Address(AddressRegister::A2),
+            Register::Address(AddressRegister::A3),
+            Register::Address(AddressRegister::A4),
+            Register::Address(AddressRegister::A5),
+            Register::Address(AddressRegister::A6),
+            Register::Address(AddressRegister::A7),
+        ];
+        let mut result_registers = vec![];
+
+        // can be optimized with iterators
+        for (idx, register) in all_registers.iter().enumerate() {
+            if (mask >> idx) & 1 == 1 {
+                result_registers.push(*register);
+            }
+        }
+
+        result_registers
     }
 
     fn from_m68kdecode_with_register_indexing(
@@ -476,6 +538,7 @@ impl AddressMode {
                 OperandSize::Word => Ok(M68kInteger::Word(cpu.registers.get(register) as u16)),
                 OperandSize::Long => Ok(M68kInteger::Long(cpu.registers.get(register))),
             },
+            AddressMode::RegisterDirectList { .. } => Err(EmulationError::ReadMultipleRegisters),
             AddressMode::RegisterIndirect { register } => cpu
                 .memory
                 .read(cpu.registers.get_address_register(register), size),
@@ -621,7 +684,13 @@ impl AddressMode {
                 cpu.registers.set(register, new_value);
                 Ok(())
             }
-
+            AddressMode::RegisterDirectList { ref registers } => {
+                let new_value: u32 = new_value.into();
+                for register in registers {
+                    cpu.registers.set(*register, new_value);
+                }
+                Ok(())
+            }
             AddressMode::RegisterIndirect { register } => cpu
                 .memory
                 .write(cpu.registers.get_address_register(register), new_value),
@@ -746,6 +815,7 @@ impl AddressMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cpu::registers::{AddressRegister::*, DataRegister::*};
     use crate::ram::{Memory, VecBackedMemory};
 
     // This saves us from having to hardcode lots of values or declare the same variables in each test function.
@@ -1198,5 +1268,65 @@ mod tests {
         let mode = AddressMode::Immediate { value: 0xAA };
 
         mode.set_value(&mut cpu, M68kInteger::Byte(1)).unwrap();
+    }
+
+    // These test cases were manually generated with an assembler.
+    // See the comments for AddressMode::from_m68kdecode_register_bitmask for more info.
+    #[test]
+    fn register_list_from_m68kdecode_bitmask() {
+        for (regs, mask) in [
+            (
+                vec![Register::Data(D0), Register::Data(D1)],
+                0b0000_0000_0000_0011,
+            ),
+            (
+                vec![
+                    Register::Data(D0),
+                    Register::Data(D1),
+                    Register::Data(D2),
+                    Register::Data(D3),
+                    Register::Data(D4),
+                    Register::Data(D5),
+                    Register::Data(D6),
+                    Register::Data(D7),
+                ],
+                0b0000_0000_1111_1111,
+            ),
+            (
+                vec![
+                    Register::Data(D0),
+                    Register::Data(D1),
+                    Register::Data(D2),
+                    Register::Data(D3),
+                    Register::Data(D4),
+                    Register::Data(D5),
+                    Register::Data(D6),
+                ],
+                0b0000_0000_0111_1111,
+            ),
+            (
+                vec![
+                    Register::Address(A0),
+                    Register::Address(A1),
+                    Register::Address(A2),
+                    Register::Address(A3),
+                    Register::Address(A4),
+                    Register::Address(A5),
+                    Register::Address(A6),
+                    Register::Address(A7),
+                ],
+                0b1111_1111_0000_0000,
+            ),
+            (
+                vec![
+                    Register::Data(D1),
+                    Register::Address(A2),
+                    Register::Address(A5),
+                ],
+                0b0010_0100_0000_0010,
+            ),
+        ] {
+            assert_eq!(AddressMode::from_m68kdecode_register_bitmask(mask), regs);
+        }
     }
 }

@@ -195,7 +195,11 @@ impl Instruction {
             Instruction::JumpTo { address } => {
                 let val = address.get_value(cpu, OperandSize::Long)?;
                 let int: u32 = val.into();
-                eprintln!("Jumping to {:X} (current PC value: {:?})", int, cpu.registers.get(Register::ProgramCounter));
+                eprintln!(
+                    "Jumping to {:X} (current PC value: {:?})",
+                    int,
+                    cpu.registers.get(Register::ProgramCounter)
+                );
                 cpu.registers.set(Register::ProgramCounter, val);
                 Ok(())
             }

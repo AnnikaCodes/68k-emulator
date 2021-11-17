@@ -1,12 +1,8 @@
-
 use std::path::PathBuf;
 
 use emulator::cpu::registers::Register;
 use emulator::ram::Memory;
-use emulator::{
-    cpu::{CPU},
-    ram::VecBackedMemory,
-};
+use emulator::{cpu::CPU, ram::VecBackedMemory};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]

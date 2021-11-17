@@ -66,7 +66,8 @@ where
 
         // Increment PC only if the instruction didn't alter it itself
         if pc == self.registers.get(Register::ProgramCounter) {
-            self.registers.set(Register::ProgramCounter, pc + bytes_taken as u32);
+            self.registers
+                .set(Register::ProgramCounter, pc + bytes_taken as u32);
         }
         Ok(())
     }
