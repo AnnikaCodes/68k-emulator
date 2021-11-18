@@ -86,15 +86,12 @@ impl Parser<Vec<u8>> for MachineCodeParser {
                 bound: src.unwrap(),
             },
             Operation::NOP => Instruction::NoOp,
-            _ => {
-                eprintln!(
-                    "{}: {} for instruction {:?}",
-                    "Unknown operation".red().bold(),
-                    format!("{:?}", decoded.instruction.operation).cyan().bold(),
-                    decoded
-                );
-                Instruction::NoOp
-            }
+            Operation::RTS => Instruction::ReturnFromSubroutine,
+            _ => unimplemented!(
+                "{} for instruction {:?}",
+                format!("{:?}", decoded.instruction.operation).cyan().bold(),
+                decoded
+            ),
         };
 
         Ok((parsed, size, decoded.bytes_used))

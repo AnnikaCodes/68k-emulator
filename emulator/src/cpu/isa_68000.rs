@@ -93,6 +93,8 @@ use crate::{
     EmulationError, OperandSize,
 };
 
+use super::registers::AddressRegister;
+
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
     Add {
@@ -138,6 +140,7 @@ pub enum Instruction {
         bound: AddressMode,
         value: AddressMode,
     },
+    ReturnFromSubroutine,
     NoOp,
 }
 
@@ -214,9 +217,18 @@ impl Instruction {
                     Ok(())
                 }
             }
+            Instruction::ReturnFromSubroutine => {
+                let stack_value = AddressMode::RegisterIndirectPostIncrement {
+                    register: AddressRegister::A7, // stack pointer
+                }
+                .get_value(cpu, OperandSize::Long)?;
+                dbg!(stack_value);
+                cpu.registers.set(Register::ProgramCounter, stack_value);
+                Ok(())
+            }
             Instruction::NoOp => Ok(()),
 
-            _ => unimplemented!("instruction {:?}", self),
+            _ => todo!("implement {:?}", self),
         }
     }
 }
