@@ -1,0 +1,11 @@
+{
+  "name": "website",
+  "version": "0.1.0",
+  "files": [
+    "website_bg.wasm",
+    "website.js",
+    "website.d.ts"
+  ],
+  "browser": "website.js",
+  "types": "website.d.ts"
+}
